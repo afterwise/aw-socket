@@ -31,7 +31,7 @@ void socket_end() {
 }
 
 int socket_connect(const char *node, const char *service, int flags) {
-	struct addrinfo hints, *res, *p;
+	struct addrinfo hints, *res;
 	int sd;
 
 	memset(&hints, 0, sizeof hints);
@@ -56,7 +56,7 @@ int socket_connect(const char *node, const char *service, int flags) {
 	}
 
 	if (node != NULL)
-		if (connect(sd, p->ai_addr, p->ai_addrlen) < 0) {
+		if (connect(sd, res->ai_addr, res->ai_addrlen) < 0) {
 			socket_close(sd);
 			goto bail;
 		}
