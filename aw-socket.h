@@ -9,10 +9,6 @@
 # include <sys/socket.h>
 #endif
 
-#if !_MSC_VER
-# include <stdbool.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -4,7 +4,7 @@ LIBSUF ?= .a
 SOURCES := $(shell ls | grep -xE '(\w|\-)+\.c')
 OBJECTS := $(patsubst %.c, %$(EXESUF).o, $(SOURCES))
 
-PRODUCTS := libaw-sock$(EXESUF)$(LIBSUF)
+PRODUCTS := libaw-socket$(EXESUF)$(LIBSUF)
 
 .PHONY: all
 all: $(PRODUCTS)
