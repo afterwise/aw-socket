@@ -189,27 +189,22 @@ ssize_t socket_recv(int sd, void *p, size_t n) {
 }
 
 ssize_t socket_sendto(int sd, const void *p, size_t n, const struct sockaddr_storage *addr, socklen_t addrlen) {
-        ssize_t err, off, len;
+        ssize_t err;
 
-        for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
-                if ((err = sendto(sd, (const char *) p + off, len, 0, (struct sockaddr *) addr, addrlen)) < 0)
-			if (errno != EINTR)
-				return -1;
+	do err = sendto(sd, p, n, 0, (struct sockaddr *) addr, addrlen);
+	while (err < 0 && errno != EINTR);
 
-        return off;
+        return err;
 }
 
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct sockaddr_storage *addr, socklen_t *addrlen) {
-        ssize_t err, off, len;
+        ssize_t err;
 
 	*addrlen = sizeof *addr;
 
-        for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
-                if ((err = recvfrom(sd, (char *) p + off, len, 0, (struct sockaddr *) addr, addrlen)) == 0)
-                        break;
-                else if (err < 0 && errno != EINTR)
-                        return -1;
+	do err = recvfrom(sd, p, n, 0, (struct sockaddr *) addr, addrlen);
+	while (err < 0 && errno == EINTR);
 
-        return off;
+        return err;
 }
 
