@@ -26,6 +26,10 @@ enum {
 	SOCKET_REUSEADDR = 1 << 2
 };
 
+int socket_getaddr(
+	struct sockaddr_storage *addr, socklen_t *addrlen,
+	const char *node, const char *service);
+
 int socket_connect(const char *node, const char *service, int flags);
 int socket_listen(const char *service, int flags);
 int socket_accept(int sd, struct sockaddr_storage *addr, socklen_t *addrlen);

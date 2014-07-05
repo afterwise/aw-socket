@@ -30,6 +30,28 @@ void socket_end() {
 #endif
 }
 
+int socket_getaddr(
+		struct sockaddr_storage *addr, socklen_t *addrlen,
+		const char *node, const char *service) {
+	struct addrinfo hints, *res;
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+
+	if (getaddrinfo(node, service, &hints, &res) < 0)
+		goto bail;
+
+	memcpy(addr, res->ai_addr, res->ai_addrlen);
+	*addrlen = res->ai_addrlen;
+
+	freeaddrinfo(res);
+	return 0;
+
+bail:
+	freeaddrinfo(res);
+	return -1;
+}
+
 int socket_connect(const char *node, const char *service, int flags) {
 	struct addrinfo hints, *res;
 	int sd;
@@ -38,7 +60,7 @@ int socket_connect(const char *node, const char *service, int flags) {
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
 
-	if (getaddrinfo(node, service, &hints, &res) != 0)
+	if (getaddrinfo(node, service, &hints, &res) < 0)
 		goto bail;
 
 	if ((sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0)
@@ -79,7 +101,7 @@ int socket_listen(const char *service, int flags) {
 	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
 	hints.ai_flags = AI_PASSIVE;
 
-	if (getaddrinfo(NULL, service, &hints, &res) != 0)
+	if (getaddrinfo(NULL, service, &hints, &res) < 0)
 		goto bail;
 
 	if ((sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0)
