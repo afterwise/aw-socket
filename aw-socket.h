@@ -38,7 +38,7 @@ int socket_close(int sd);
 ssize_t socket_send(int sd, const void *p, size_t n);
 ssize_t socket_recv(int sd, void *p, size_t n);
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct sockaddr *addr, socklen_t addrlen);
+ssize_t socket_sendto(int sd, const void *p, size_t n, const struct sockaddr_storage *addr, socklen_t addrlen);
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct sockaddr_storage *addr, socklen_t *addrlen);
 
 #ifdef __cplusplus
