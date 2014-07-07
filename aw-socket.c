@@ -36,108 +36,121 @@ int socket_getaddr(
 	struct addrinfo hints, *res;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET6;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
 
 	if (getaddrinfo(node, service, &hints, &res) < 0)
-		goto bail;
+		return -1;
 
 	memcpy(addr, res->ai_addr, res->ai_addrlen);
 	*addrlen = res->ai_addrlen;
 
 	freeaddrinfo(res);
 	return 0;
-
-bail:
-	freeaddrinfo(res);
-	return -1;
 }
 
 int socket_connect(const char *node, const char *service, int flags) {
-	struct addrinfo hints, *res;
-	int sd;
+	struct addrinfo hints, *res, *ai;
+	int sd = -1;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET6;
 	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
+	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
 
 	if (getaddrinfo(node, service, &hints, &res) < 0)
-		goto bail;
+		return -1;
 
-	if ((sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0)
-		goto bail;
+	for (ai = res; ai != NULL; ai = ai->ai_next) {
+		if ((sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) < 0)
+			continue;
 
-	if ((flags & SOCKET_NONBLOCK) != 0) {
+		if ((flags & SOCKET_NONBLOCK) != 0) {
 #if _WIN32
-		DWORD nonblock = 1;
-		if (ioctlsocket(sd, FIONBIO, &nonblock) < 0)
-			goto bail;
+			DWORD nonblock = 1;
+			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
 #else
-		if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0)
-			goto bail;
+			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
 #endif
-	}
-
-	if (node != NULL)
-		if (connect(sd, res->ai_addr, res->ai_addrlen) < 0) {
-			socket_close(sd);
-			goto bail;
 		}
 
+		if ((flags & SOCKET_STREAM) == 0 ||
+				connect(sd, ai->ai_addr, ai->ai_addrlen) == 0)
+			break;
+
+		socket_close(sd);
+		sd = -1;
+	}
+
 	freeaddrinfo(res);
 	return sd;
-
-bail:
-	freeaddrinfo(res);
-	return -1;
 }
 
-int socket_listen(const char *service, int flags) {
-	struct addrinfo hints, *res;
+int socket_listen(const char *node, const char *service, int flags) {
+	struct addrinfo hints, *res, *ai;
 	int reuse = 1;
-	int sd;
+	int sd = -1;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET6;
 	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
-	hints.ai_flags = AI_PASSIVE;
+	hints.ai_flags = AI_PASSIVE | AI_V4MAPPED | AI_ADDRCONFIG;
 
-	if (getaddrinfo(NULL, service, &hints, &res) < 0)
-		goto bail;
+	if (getaddrinfo(node, service, &hints, &res) < 0)
+		return -1;
 
-	if ((sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0)
-		goto bail;
+	for (ai = res; ai != NULL; ai = ai->ai_next) {
+		if ((sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) < 0)
+			continue;
 
-	if ((flags & SOCKET_NONBLOCK) != 0) {
+		if ((flags & SOCKET_NONBLOCK) != 0) {
 #if _WIN32
-		DWORD nonblock = 1;
-		if (ioctlsocket(sd, FIONBIO, &nonblock) < 0)
-			goto bail;
+			DWORD nonblock = 1;
+			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
 #else
-		if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0)
-			goto bail;
+			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
 #endif
-	}
+		}
 
-	if ((flags & SOCKET_REUSEADDR) != 0)
-		if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (void *) &reuse, sizeof reuse) < 0)
-			goto bail;
+		if ((flags & SOCKET_REUSEADDR) != 0)
+			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (void *) &reuse, sizeof reuse) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
 
-	if (bind(sd, res->ai_addr, res->ai_addrlen) < 0) {
+		if (bind(sd, ai->ai_addr, ai->ai_addrlen) < 0) {
+			socket_close(sd);
+			sd = -1;
+			continue;
+		}
+
+		if ((flags & SOCKET_STREAM) == 0 || listen(sd, 4) == 0)
+			break;
+
 		socket_close(sd);
-		goto bail;
-	}
-
-	if (listen(sd, 4) < 0) {
-		socket_close(sd);
-		goto bail;
+		sd = -1;
 	}
 
 	freeaddrinfo(res);
 	return sd;
-
-bail:
-	freeaddrinfo(res);
-	return -1;
 }
 
 int socket_accept(int sd, struct sockaddr_storage *addr, socklen_t *addrlen) {

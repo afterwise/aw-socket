@@ -31,7 +31,7 @@ int socket_getaddr(
 	const char *node, const char *service);
 
 int socket_connect(const char *node, const char *service, int flags);
-int socket_listen(const char *service, int flags);
+int socket_listen(const char *node, const char *service, int flags);
 int socket_accept(int sd, struct sockaddr_storage *addr, socklen_t *addrlen);
 int socket_close(int sd);
 
