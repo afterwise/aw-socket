@@ -6,6 +6,7 @@
 # include <winsock2.h>
 # include <sys/types.h>
 #else
+# include <netinet/in.h>
 # include <sys/socket.h>
 #endif
 
@@ -17,6 +18,15 @@ extern "C" {
 typedef int socklen_t;
 #endif
 
+struct endpoint {
+	union {
+		struct sockaddr_storage addrbuf;
+		struct sockaddr_in addr;
+		struct sockaddr_in6 addr6;
+	};
+	socklen_t addrlen;
+};
+
 void socket_init();
 void socket_end();
 
@@ -26,20 +36,18 @@ enum {
 	SOCKET_REUSEADDR = 1 << 2
 };
 
-int socket_getaddr(
-	struct sockaddr_storage *addr, socklen_t *addrlen,
-	const char *node, const char *service);
+int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
 
 int socket_connect(const char *node, const char *service, int flags);
 int socket_listen(const char *node, const char *service, int flags);
-int socket_accept(int sd, struct sockaddr_storage *addr, socklen_t *addrlen);
+int socket_accept(int sd, struct endpoint *ep);
 int socket_close(int sd);
 
 ssize_t socket_send(int sd, const void *p, size_t n);
 ssize_t socket_recv(int sd, void *p, size_t n);
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct sockaddr_storage *addr, socklen_t addrlen);
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct sockaddr_storage *addr, socklen_t *addrlen);
+ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep);
+ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -30,9 +30,7 @@ void socket_end() {
 #endif
 }
 
-int socket_getaddr(
-		struct sockaddr_storage *addr, socklen_t *addrlen,
-		const char *node, const char *service) {
+int socket_getaddr(struct endpoint *ep, const char *node, const char *service) {
 	struct addrinfo hints, *res;
 
 	memset(&hints, 0, sizeof hints);
@@ -43,8 +41,8 @@ int socket_getaddr(
 	if (getaddrinfo(node, service, &hints, &res) < 0)
 		return -1;
 
-	memcpy(addr, res->ai_addr, res->ai_addrlen);
-	*addrlen = res->ai_addrlen;
+	memcpy(&ep->addrbuf, res->ai_addr, res->ai_addrlen);
+	ep->addrlen = res->ai_addrlen;
 
 	freeaddrinfo(res);
 	return 0;
@@ -153,12 +151,12 @@ int socket_listen(const char *node, const char *service, int flags) {
 	return sd;
 }
 
-int socket_accept(int sd, struct sockaddr_storage *addr, socklen_t *addrlen) {
+int socket_accept(int sd, struct endpoint *ep) {
 	int res;
 
-	*addrlen = sizeof *addr;
+	ep->addrlen = sizeof ep->addrbuf;
 
-	while ((res = accept(sd, (struct sockaddr *) addr, addrlen)) < 0)
+	while ((res = accept(sd, (struct sockaddr *) &ep->addrbuf, &ep->addrlen)) < 0)
 		if (errno != EINTR)
 			return -1;
 
@@ -201,21 +199,21 @@ ssize_t socket_recv(int sd, void *p, size_t n) {
         return off;
 }
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct sockaddr_storage *addr, socklen_t addrlen) {
+ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep) {
         ssize_t err;
 
-	do err = sendto(sd, p, n, 0, (struct sockaddr *) addr, addrlen);
+	do err = sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
 	while (err < 0 && errno != EINTR);
 
         return err;
 }
 
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct sockaddr_storage *addr, socklen_t *addrlen) {
+ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
         ssize_t err;
 
-	*addrlen = sizeof *addr;
+	ep->addrlen = sizeof ep->addrbuf;
 
-	do err = recvfrom(sd, p, n, 0, (struct sockaddr *) addr, addrlen);
+	do err = recvfrom(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, &ep->addrlen);
 	while (err < 0 && errno == EINTR);
 
         return err;
