@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void socket_init() {
+void socket_init(void) {
 #if _WIN32
 	WSADATA data;
 
@@ -24,7 +24,7 @@ void socket_init() {
 #endif
 }
 
-void socket_end() {
+void socket_end(void) {
 #if _WIN32
 	WSACleanup();
 #endif

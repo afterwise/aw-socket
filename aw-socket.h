@@ -27,8 +27,8 @@ struct endpoint {
 	socklen_t addrlen;
 };
 
-void socket_init();
-void socket_end();
+void socket_init(void);
+void socket_end(void);
 
 enum {
 	SOCKET_STREAM = 1 << 0,
