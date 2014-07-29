@@ -203,7 +203,7 @@ ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep
         ssize_t err;
 
 	do err = sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
-	while (err < 0 && errno != EINTR);
+	while (err < 0 && errno == EINTR);
 
         return err;
 }
