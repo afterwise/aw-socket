@@ -38,6 +38,7 @@ enum {
 
 int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
 
+int socket_broadcast();
 int socket_connect(const char *node, const char *service, int flags);
 int socket_listen(const char *node, const char *service, int flags);
 int socket_accept(int sd, struct endpoint *ep);

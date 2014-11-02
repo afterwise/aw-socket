@@ -48,6 +48,21 @@ int socket_getaddr(struct endpoint *ep, const char *node, const char *service) {
 	return 0;
 }
 
+int socket_broadcast() {
+	int sd;
+	int broadcast = 1;
+
+	if ((sd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
+		return -1;
+
+	if (setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof broadcast) < 0) {
+		socket_close(sd);
+		return -1;
+	}
+
+	return sd;
+}
+
 int socket_connect(const char *node, const char *service, int flags) {
 	struct addrinfo hints, *res, *ai;
 	int sd = -1;
