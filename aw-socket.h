@@ -8,6 +8,7 @@
 #else
 # include <netinet/in.h>
 # include <sys/socket.h>
+# include <netdb.h>
 #endif
 
 #ifdef __cplusplus
@@ -33,10 +34,17 @@ void socket_end(void);
 enum {
 	SOCKET_STREAM = 1 << 0,
 	SOCKET_NONBLOCK = 1 << 1,
-	SOCKET_REUSEADDR = 1 << 2
+	SOCKET_REUSEADDR = 1 << 2,
+	SOCKET_WAITALL = 1 << 3
 };
 
+#define SOCKET_MAXNODE (NI_MAXHOST)
+#define SOCKET_MAXSERV (NI_MAXSERV)
+
 int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
+int socket_getname(
+	char node[static SOCKET_MAXNODE], char serv[static SOCKET_MAXSERV],
+	const struct endpoint *ep);
 
 int socket_broadcast();
 int socket_connect(const char *node, const char *service, int flags);
@@ -45,7 +53,7 @@ int socket_accept(int sd, struct endpoint *ep);
 int socket_close(int sd);
 
 ssize_t socket_send(int sd, const void *p, size_t n);
-ssize_t socket_recv(int sd, void *p, size_t n);
+ssize_t socket_recv(int sd, void *p, size_t n, int flags);
 
 ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep);
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep);

@@ -48,6 +48,14 @@ int socket_getaddr(struct endpoint *ep, const char *node, const char *service) {
 	return 0;
 }
 
+int socket_getname(
+		char node[static SOCKET_MAXNODE], char serv[static SOCKET_MAXSERV],
+		const struct endpoint *ep) {
+	return getnameinfo(
+		(const struct sockaddr *) &ep->addrbuf, ep->addrlen,
+		node, SOCKET_MAXNODE, serv, SOCKET_MAXSERV, 0);
+}
+
 int socket_broadcast() {
 	int sd;
 	int broadcast = 1;
@@ -171,22 +179,19 @@ int socket_accept(int sd, struct endpoint *ep) {
 
 	ep->addrlen = sizeof ep->addrbuf;
 
-	while ((res = accept(sd, (struct sockaddr *) &ep->addrbuf, &ep->addrlen)) < 0)
-		if (errno != EINTR)
-			return -1;
+	if ((res = accept(sd, (struct sockaddr *) &ep->addrbuf, &ep->addrlen)) < 0)
+		return -1;
 
 	return res;
 }
 
 int socket_close(int sd) {
 #if _WIN32
-	while (closesocket(sd) == SOCKET_ERROR)
-		if (WSAGetLastError() != WSAEINTR)
-			return -1;
+	if (closesocket(sd) == SOCKET_ERROR)
+		return -1;
 #else
-	while (close(sd) < 0)
-		if (errno != EINTR)
-			return -1;
+	if (close(sd) < 0)
+		return -1;
 #endif
 
 	return 0;
@@ -196,41 +201,22 @@ ssize_t socket_send(int sd, const void *p, size_t n) {
         ssize_t err, off, len;
 
         for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
-                if ((err = send(sd, (const char *) p + off, len, 0)) < 0 && errno != EINTR)
+                if ((err = send(sd, (const char *) p + off, len, 0)) < 0)
                         return -1;
 
         return off;
 }
 
-ssize_t socket_recv(int sd, void *p, size_t n) {
-        ssize_t err, off, len;
-
-        for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
-                if ((err = recv(sd, (char *) p + off, len, 0)) == 0)
-                        break;
-                else if (err < 0 && errno != EINTR)
-                        return -1;
-
-        return off;
+ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
+	return recv(sd, p, n, (flags & SOCKET_WAITALL) ? MSG_WAITALL : 0);
 }
 
 ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep) {
-        ssize_t err;
-
-	do err = sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
-	while (err < 0 && errno == EINTR);
-
-        return err;
+	return sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
 }
 
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
-        ssize_t err;
-
 	ep->addrlen = sizeof ep->addrbuf;
-
-	do err = recvfrom(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, &ep->addrlen);
-	while (err < 0 && errno == EINTR);
-
-        return err;
+	return recvfrom(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, &ep->addrlen);
 }
 
