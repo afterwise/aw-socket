@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 	strcpy(buf, REQUEST);
 	err = socket_send(sd, buf, sizeof REQUEST - 1);
 
-	err = socket_recv(sd, buf, sizeof buf);
+	err = socket_recv(sd, buf, sizeof buf, SOCKET_WAITALL);
 	printf("%s\n", buf);
 
 	err = socket_close(sd);
