@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2015 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2016 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,12 @@
 extern "C" {
 #endif
 
+#ifndef __cplusplus
+# define _socket_staticsize static
+#else
+# define _socket_staticsize
+#endif
+
 #if _WIN32
 typedef int socklen_t;
 #endif
@@ -54,10 +60,12 @@ void socket_init(void);
 void socket_end(void);
 
 enum {
-	SOCKET_STREAM = 1 << 0,
-	SOCKET_NONBLOCK = 1 << 1,
-	SOCKET_REUSEADDR = 1 << 2,
-	SOCKET_WAITALL = 1 << 3
+	SOCKET_STREAM = 0x1,
+	SOCKET_NONBLOCK = 0x2,
+	SOCKET_REUSEADDR = 0x4,
+	SOCKET_FASTOPEN = 0x8,
+	SOCKET_DEFERACCEPT = 0x10,
+	SOCKET_WAITALL = 0x20,
 };
 
 #define SOCKET_MAXNODE (NI_MAXHOST)
@@ -65,7 +73,8 @@ enum {
 
 int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
 int socket_getname(
-	char node[static SOCKET_MAXNODE], char serv[static SOCKET_MAXSERV],
+	char node[_socket_staticsize SOCKET_MAXNODE],
+	char serv[_socket_staticsize SOCKET_MAXSERV],
 	const struct endpoint *ep);
 
 int socket_broadcast();

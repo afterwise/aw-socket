@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2015 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2016 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,11 @@
 # include <unistd.h>
 #endif
 
+#if __linux__ || __APPLE__
+# include <netinet/tcp.h>
+#endif
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,8 +45,10 @@ void socket_init(void) {
 #if _WIN32
 	WSADATA data;
 
-	if (WSAStartup(MAKEWORD(2, 2), &data) != 0)
-		fprintf(stderr, "WSAStartup: %d\n", WSAGetLastError()), abort();
+	if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
+		fprintf(stderr, "WSAStartup: %d\n", WSAGetLastError());
+		abort();
+	}
 #endif
 }
 
@@ -70,7 +77,8 @@ int socket_getaddr(struct endpoint *ep, const char *node, const char *service) {
 }
 
 int socket_getname(
-		char node[static SOCKET_MAXNODE], char serv[static SOCKET_MAXSERV],
+		char node[_socket_staticsize SOCKET_MAXNODE],
+		char serv[_socket_staticsize SOCKET_MAXSERV],
 		const struct endpoint *ep) {
 	return getnameinfo(
 		(const struct sockaddr *) &ep->addrbuf, ep->addrlen,
@@ -78,8 +86,7 @@ int socket_getname(
 }
 
 int socket_broadcast() {
-	int sd;
-	int broadcast = 1;
+	int sd, broadcast = 1;
 
 	if ((sd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		return -1;
@@ -125,8 +132,27 @@ int socket_connect(const char *node, const char *service, int flags) {
 #endif
 		}
 
-		if ((flags & SOCKET_STREAM) == 0 ||
-				connect(sd, ai->ai_addr, ai->ai_addrlen) == 0)
+		if ((flags & SOCKET_STREAM) == 0)
+			break;
+#if TCP_FASTOPEN
+		if ((flags & SOCKET_FASTOPEN) != 0) {
+# if __APPLE__
+			sa_endpoints_t ep;
+			memset(&ep, 0, sizeof ep);
+			ep.sae_dstaddr = (struct sockaddr *) ai->ai_addr;
+			ep.sae_dstaddrlen = ai->ai_addrlen;
+			if (connectx(
+					sd, &ep, SAE_ASSOCID_ANY,
+					CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT,
+					NULL, 0, NULL, NULL) == 0 || errno == EINPROGRESS)
+				break;
+# elif MSG_FASTOPEN
+			if (sendto(sd, "", 0, MSG_FASTOPEN, ai->ai_addr, ai->ai_addrlen) == 0)
+				break;
+# endif
+		}
+#endif
+		if (connect(sd, ai->ai_addr, ai->ai_addrlen) == 0 || errno == EINPROGRESS)
 			break;
 
 		socket_close(sd);
@@ -139,8 +165,8 @@ int socket_connect(const char *node, const char *service, int flags) {
 
 int socket_listen(const char *node, const char *service, int flags) {
 	struct addrinfo hints, *res, *ai;
-	int reuse = 1;
 	int sd = -1;
+	int val;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET6;
@@ -153,6 +179,27 @@ int socket_listen(const char *node, const char *service, int flags) {
 	for (ai = res; ai != NULL; ai = ai->ai_next) {
 		if ((sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) < 0)
 			continue;
+
+#if TCP_FASTOPEN
+		if ((flags & SOCKET_FASTOPEN) != 0) {
+			val = 5; /* qlen */
+			if (setsockopt(sd, IPPROTO_TCP, TCP_FASTOPEN, &val, sizeof val) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
+		}
+#endif
+#if __linux__
+		if ((flags & SOCKET_DEFERACCEPT) != 0) {
+			val = 5; /* secs */
+			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &val, sizeof val) < 0) {
+				socket_close(sd);
+				sd = -1;
+				continue;
+			}
+		}
+#endif
 
 		if ((flags & SOCKET_NONBLOCK) != 0) {
 #if _WIN32
@@ -171,12 +218,14 @@ int socket_listen(const char *node, const char *service, int flags) {
 #endif
 		}
 
-		if ((flags & SOCKET_REUSEADDR) != 0)
-			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (void *) &reuse, sizeof reuse) < 0) {
+		if ((flags & SOCKET_REUSEADDR) != 0) {
+			val = 1; /* reuse */
+			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val) < 0) {
 				socket_close(sd);
 				sd = -1;
 				continue;
 			}
+		}
 
 		if (bind(sd, ai->ai_addr, ai->ai_addrlen) < 0) {
 			socket_close(sd);
