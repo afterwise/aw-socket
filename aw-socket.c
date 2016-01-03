@@ -364,7 +364,7 @@ ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
 }
 
 #if __linux__ || __APPLE__
-struct webservicedispatchinfo {
+struct dispatchinfo {
 	webservicehandler_t handler;
 	int sockdesc;
 	int index;
@@ -372,38 +372,33 @@ struct webservicedispatchinfo {
 	int queues[];
 };
 
-static void acceptwebservice(uintptr_t arg) {
-	struct webservicedispatchinfo *di = (struct webservicedispatchinfo *) arg;
-	struct endpoint ep;
-	int sd, i = 0;
-
-	while ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0) {
+static void webservice_addevent(int q, int sd) {
 # if __linux__
-		struct epoll_event e;
-		memset(&e, 0, sizeof e);
-		e.data.fd = sd;
-		e.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLET;
-		epoll_ctl(di->queues[i], EPOLL_CTL_ADD, sd, &e);
+	struct epoll_event e;
+	memset(&e, 0, sizeof e);
+	e.data.fd = sd;
+	e.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLET;
+	epoll_ctl(q, EPOLL_CTL_ADD, sd, &e);
 # else
-		struct kevent e;
-		EV_SET(&e, sd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-		kevent(di->queues[i], &e, 1, NULL, 0, NULL);
+	struct kevent e;
+	EV_SET(&e, sd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+	kevent(q, &e, 1, NULL, 0, NULL);
 # endif
-		i = (i + 1) % di->count;
-	}
-
-	free(di);
 }
 
-static void dispatchwebservice(uintptr_t arg) {
-	struct webservicedispatchinfo *di = (struct webservicedispatchinfo *) arg;
-	int i, err;
+static void webservice_dispatch(uintptr_t arg) {
+	struct dispatchinfo *di = (struct dispatchinfo *) arg;
+	struct endpoint ep;
+	int sd, i, err;
 
 # ifdef __linux__
 	struct epoll_event e[256];
 	while ((err = epoll_wait(di->queues[di->index], e, 256, -1)) >= 0) {
 		for (i = 0; i < err; ++i)
-			if ((e[i].events & (EPOLLRDHUP | EPOLLHUP)) != 0)
+			if (e[i].data.fd == di->sockdesc) {
+				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
+					webservice_addevent(di->queues[di->index], sd);
+			} else if ((e[i].events & (EPOLLRDHUP | EPOLLHUP)) != 0)
 				socket_close(e[i].data.fd);
 			else
 				di->handler(e[i].data.fd);
@@ -412,35 +407,23 @@ static void dispatchwebservice(uintptr_t arg) {
 	struct kevent e[256];
 	while ((err = kevent(di->queues[di->index], 0, 0, e, 256, 0)) >= 0) {
 		for (i = 0; i < err; ++i)
-			if ((e[i].flags & EV_EOF) != 0)
-				socket_close(e[i].ident);
+			if ((int) e[i].ident == di->sockdesc) {
+				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
+					webservice_addevent(di->queues[di->index], sd);
+			} else if ((e[i].flags & EV_EOF) != 0)
+				socket_close((int) e[i].ident);
 			else
-				di->handler(e[i].ident);
+				di->handler((int) e[i].ident);
 	}
 # endif
 
 	free(di);
 }
 
-static struct webservicedispatchinfo *createwebservicedispatchinfo(
-		webservicehandler_t handler, int sd, int i, int n, int *queues) {
-	struct webservicedispatchinfo *di =
-		(struct webservicedispatchinfo *) malloc(
-			sizeof (struct webservicedispatchinfo) + n * sizeof (int));
-	int j;
-	di->handler = handler;
-	di->sockdesc = sd;
-	di->index = i;
-	di->count = n;
-	for (j = 0; j < n; ++j)
-		di->queues[j] = queues[j];
-	return di;
-}
-
 int socket_webservice(const char *node, const char *service, webservicehandler_t handler) {
-	struct webservicedispatchinfo *di;
+	struct dispatchinfo *di;
 	int sd, *queues;
-	int i, n;
+	int i, j, n;
 
 	n = sysconf(_SC_NPROCESSORS_ONLN);
 	if (n < 2)
@@ -448,7 +431,8 @@ int socket_webservice(const char *node, const char *service, webservicehandler_t
 
 	if ((sd = socket_listen(
 			node, service,
-			SOCKET_STREAM | SOCKET_REUSEADDR | SOCKET_FASTOPEN | SOCKET_DEFERACCEPT)) < 0)
+			SOCKET_STREAM | SOCKET_NONBLOCK | SOCKET_REUSEADDR |
+				SOCKET_FASTOPEN | SOCKET_DEFERACCEPT)) < 0)
 		return sd;
 
 	queues = (int *) alloca(n * sizeof (int));
@@ -460,12 +444,16 @@ int socket_webservice(const char *node, const char *service, webservicehandler_t
 # endif
 
 	for (i = 0; i < n; ++i) {
-		di = createwebservicedispatchinfo(handler, sd, i, n, queues);
-		thread_spawn(dispatchwebservice, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
+		di = (struct dispatchinfo *) malloc(sizeof (struct dispatchinfo) + n * sizeof (int));
+		di->handler = handler;
+		di->sockdesc = sd;
+		di->index = i;
+		di->count = n;
+		for (j = 0; j < n; ++j)
+			di->queues[j] = queues[j];
+		webservice_addevent(queues[i], sd);
+		thread_spawn(webservice_dispatch, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
 	}
-
-	di = createwebservicedispatchinfo(handler, sd, -1, n, queues);
-	thread_spawn(acceptwebservice, THREAD_HIGH_PRIORITY, THREAD_NO_AFFINITY, 64 * 1024, (uintptr_t) di);
 
 	return sd;
 }
