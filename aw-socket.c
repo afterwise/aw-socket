@@ -452,20 +452,20 @@ int socket_webservice(const char *node, const char *service, webservicehandler_t
 		return sd;
 
 	queues = (int *) alloca(n * sizeof (int));
-        for (i = 0; i < n; ++i)
+	for (i = 0; i < n; ++i)
 # if __linux__
 		queues[i] = epoll_create1(0);
 # else
 		queues[i] = kqueue();
 # endif
 
-        for (i = 0; i < n; ++i) {
+	for (i = 0; i < n; ++i) {
 		di = createwebservicedispatchinfo(handler, sd, i, n, queues);
-                thread_spawn(dispatchwebservice, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
+		thread_spawn(dispatchwebservice, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
 	}
 
 	di = createwebservicedispatchinfo(handler, sd, -1, n, queues);
-        thread_spawn(acceptwebservice, THREAD_HIGH_PRIORITY, THREAD_NO_AFFINITY, 64 * 1024, (uintptr_t) di);
+	thread_spawn(acceptwebservice, THREAD_HIGH_PRIORITY, THREAD_NO_AFFINITY, 64 * 1024, (uintptr_t) di);
 
 	return sd;
 }
