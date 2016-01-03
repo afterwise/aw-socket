@@ -367,22 +367,20 @@ ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
 struct dispatchinfo {
 	webservicehandler_t handler;
 	int sockdesc;
-	int index;
-	int count;
-	int queues[];
+	int queue;
 };
 
-static void webservice_addevent(int q, int sd) {
+static void webservice_addevent(struct dispatchinfo *di, int sd) {
 # if __linux__
 	struct epoll_event e;
 	memset(&e, 0, sizeof e);
 	e.data.fd = sd;
 	e.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLET;
-	epoll_ctl(q, EPOLL_CTL_ADD, sd, &e);
+	epoll_ctl(di->queue, EPOLL_CTL_ADD, sd, &e);
 # else
 	struct kevent e;
 	EV_SET(&e, sd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
-	kevent(q, &e, 1, NULL, 0, NULL);
+	kevent(di->queue, &e, 1, NULL, 0, NULL);
 # endif
 }
 
@@ -393,11 +391,11 @@ static void webservice_dispatch(uintptr_t arg) {
 
 # ifdef __linux__
 	struct epoll_event e[256];
-	while ((err = epoll_wait(di->queues[di->index], e, 256, -1)) >= 0) {
+	while ((err = epoll_wait(di->queue, e, 256, -1)) >= 0) {
 		for (i = 0; i < err; ++i)
 			if (e[i].data.fd == di->sockdesc) {
 				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
-					webservice_addevent(di->queues[di->index], sd);
+					webservice_addevent(di, sd);
 			} else if ((e[i].events & (EPOLLRDHUP | EPOLLHUP)) != 0)
 				socket_close(e[i].data.fd);
 			else
@@ -405,11 +403,11 @@ static void webservice_dispatch(uintptr_t arg) {
 	}
 # else
 	struct kevent e[256];
-	while ((err = kevent(di->queues[di->index], 0, 0, e, 256, 0)) >= 0) {
+	while ((err = kevent(di->queue, 0, 0, e, 256, 0)) >= 0) {
 		for (i = 0; i < err; ++i)
 			if ((int) e[i].ident == di->sockdesc) {
 				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
-					webservice_addevent(di->queues[di->index], sd);
+					webservice_addevent(di, sd);
 			} else if ((e[i].flags & EV_EOF) != 0)
 				socket_close((int) e[i].ident);
 			else
@@ -422,8 +420,7 @@ static void webservice_dispatch(uintptr_t arg) {
 
 int socket_webservice(const char *node, const char *service, webservicehandler_t handler) {
 	struct dispatchinfo *di;
-	int sd, *queues;
-	int i, j, n;
+	int sd, i, n;
 
 	n = sysconf(_SC_NPROCESSORS_ONLN);
 	if (n < 2)
@@ -435,23 +432,16 @@ int socket_webservice(const char *node, const char *service, webservicehandler_t
 				SOCKET_FASTOPEN | SOCKET_DEFERACCEPT)) < 0)
 		return sd;
 
-	queues = (int *) alloca(n * sizeof (int));
-	for (i = 0; i < n; ++i)
-# if __linux__
-		queues[i] = epoll_create1(0);
-# else
-		queues[i] = kqueue();
-# endif
-
 	for (i = 0; i < n; ++i) {
-		di = (struct dispatchinfo *) malloc(sizeof (struct dispatchinfo) + n * sizeof (int));
+		di = (struct dispatchinfo *) malloc(sizeof (struct dispatchinfo));
 		di->handler = handler;
 		di->sockdesc = sd;
-		di->index = i;
-		di->count = n;
-		for (j = 0; j < n; ++j)
-			di->queues[j] = queues[j];
-		webservice_addevent(queues[i], sd);
+# if __linux__
+		di->queue = epoll_create1(0);
+# else
+		di->queue = kqueue();
+# endif
+		webservice_addevent(di, sd);
 		thread_spawn(webservice_dispatch, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
 	}
 
