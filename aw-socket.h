@@ -109,7 +109,7 @@ struct webserviceio {
 struct webservicefn {
 	void *(*open)(const struct webserviceio *io);
 	void (*close)(const struct webserviceio *io);
-	size_t (*read)(const struct webserviceio *io);
+	ssize_t (*read)(const struct webserviceio *io);
 };
 int socket_webservice(const char *node, const char *service, const struct webservicefn *fn);
 #endif
