@@ -365,21 +365,54 @@ ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
 
 #if __linux__ || __APPLE__
 struct dispatchinfo {
-	webservicehandler_t handler;
+	struct webservicefn fn;
 	int sockdesc;
 	int queue;
 };
 
-static void webservice_addevent(struct dispatchinfo *di, int sd) {
+static struct webserviceio *webserviceio_open(int sd, struct webservicefn *fn) {
+	struct webserviceio *io = calloc(1, sizeof (struct webserviceio));
+	io->sockdesc = sd;
+	if (fn != NULL && fn->open != NULL)
+		io->udata = fn->open(io);
+	return io;
+}
+
+static void webserviceio_close(struct webserviceio *io, struct webservicefn *fn) {
+	if (fn->close != NULL)
+		fn->close(io);
+	socket_close(io->sockdesc);
+	if (io->bufp != NULL)
+		free(io->bufp);
+	free(io);
+}
+
+static void webserviceio_read(struct webserviceio *io, struct webservicefn *fn) {
+	ssize_t err;
+
+	if (io->bufsize - io->len < 1024) {
+		io->bufsize = (io->bufsize > 0) ? io->bufsize << 1 : 2048;
+		io->bufp = realloc(io->bufp, io->bufsize);
+	}
+	if ((err = read(io->sockdesc, &io->bufp[io->len], io->bufsize - io->len)) > 0) {
+		io->len += err;
+		if (fn->read != NULL)
+			if ((err = fn->read(io)) > 0)
+				if ((io->len -= err) > 0)
+					memmove(io->bufp, &io->bufp[err], io->len);
+	}
+}
+
+static void webservice_addevent(struct dispatchinfo *di, struct webserviceio *io) {
 # if __linux__
 	struct epoll_event e;
 	memset(&e, 0, sizeof e);
-	e.data.fd = sd;
+	e.data.ptr = io;
 	e.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLET;
-	epoll_ctl(di->queue, EPOLL_CTL_ADD, sd, &e);
+	epoll_ctl(di->queue, EPOLL_CTL_ADD, io->sockdesc, &e);
 # else
 	struct kevent e;
-	EV_SET(&e, sd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+	EV_SET(&e, io->sockdesc, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, io);
 	kevent(di->queue, &e, 1, NULL, 0, NULL);
 # endif
 }
@@ -393,13 +426,13 @@ static void webservice_dispatch(uintptr_t arg) {
 	struct epoll_event e[256];
 	while ((err = epoll_wait(di->queue, e, 256, -1)) >= 0) {
 		for (i = 0; i < err; ++i)
-			if (e[i].data.fd == di->sockdesc) {
+			if (((struct webserviceio *) e[i].data.ptr)->sd == di->sockdesc) {
 				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
-					webservice_addevent(di, sd);
+					webservice_addevent(di, webserviceio_open(sd, &di->fn));
 			} else if ((e[i].events & (EPOLLRDHUP | EPOLLHUP)) != 0)
-				socket_close(e[i].data.fd);
+				webserviceio_close(e[i].data.ptr, &di->fn);
 			else
-				di->handler(e[i].data.fd);
+				webserviceio_read(e[i].data.ptr, &di->fn);
 	}
 # else
 	struct kevent e[256];
@@ -407,18 +440,18 @@ static void webservice_dispatch(uintptr_t arg) {
 		for (i = 0; i < err; ++i)
 			if ((int) e[i].ident == di->sockdesc) {
 				if ((sd = socket_accept(di->sockdesc, &ep, SOCKET_NONBLOCK)) >= 0)
-					webservice_addevent(di, sd);
+					webservice_addevent(di, webserviceio_open(sd, &di->fn));
 			} else if ((e[i].flags & EV_EOF) != 0)
-				socket_close((int) e[i].ident);
+				webserviceio_close(e[i].udata, &di->fn);
 			else
-				di->handler((int) e[i].ident);
+				webserviceio_read(e[i].udata, &di->fn);
 	}
 # endif
 
 	free(di);
 }
 
-int socket_webservice(const char *node, const char *service, webservicehandler_t handler) {
+int socket_webservice(const char *node, const char *service, const struct webservicefn *fn) {
 	struct dispatchinfo *di;
 	int sd, i, n;
 
@@ -433,15 +466,15 @@ int socket_webservice(const char *node, const char *service, webservicehandler_t
 		return sd;
 
 	for (i = 0; i < n; ++i) {
-		di = (struct dispatchinfo *) malloc(sizeof (struct dispatchinfo));
-		di->handler = handler;
+		di = malloc(sizeof (struct dispatchinfo));
+		memcpy(&di->fn, fn, sizeof di->fn);
 		di->sockdesc = sd;
 # if __linux__
 		di->queue = epoll_create1(0);
 # else
 		di->queue = kqueue();
 # endif
-		webservice_addevent(di, sd);
+		webservice_addevent(di, webserviceio_open(sd, NULL));
 		thread_spawn(webservice_dispatch, THREAD_HIGH_PRIORITY, i, 64 * 1024, (uintptr_t) di);
 	}
 
