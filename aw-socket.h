@@ -98,22 +98,6 @@ ssize_t socket_recv(int sd, void *p, size_t n, int flags);
 ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep);
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep);
 
-#if __linux__ || __APPLE__
-struct webserviceio {
-        void *udata; /* any user data */
-        void *bufp; /* data buffer */
-        size_t bufsize; /* buffer size */
-        size_t len; /* data length in buffer */
-        int sockdesc; /* socket for this stream */
-};
-struct webservicefn {
-	void *(*open)(const struct webserviceio *io);
-	void (*close)(const struct webserviceio *io);
-	ssize_t (*read)(const struct webserviceio *io);
-};
-int socket_webservice(const char *node, const char *service, const struct webservicefn *fn);
-#endif
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
