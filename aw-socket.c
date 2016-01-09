@@ -22,7 +22,6 @@
  */
 
 #include "aw-socket.h"
-#include "aw-thread.h"
 
 #if _WIN32
 # include <ws2tcpip.h>
@@ -35,12 +34,6 @@
 
 #if __linux__ || __APPLE__
 # include <netinet/tcp.h>
-#endif
-
-#if __linux__
-# include <sys/epoll.h>
-#elif __APPLE__
-# include <sys/event.h>
 #endif
 
 #include <errno.h>
