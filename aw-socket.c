@@ -184,7 +184,7 @@ int socket_connect(const char *node, const char *service, int flags) {
 	return sd;
 }
 
-int socket_listen(const char *node, const char *service, int flags) {
+int socket_listen(const char *node, const char *service, int backlog, int flags) {
 	struct addrinfo hints, *res, *ai;
 	int sd = -1;
 	int val;
@@ -247,7 +247,7 @@ int socket_listen(const char *node, const char *service, int flags) {
 		if ((flags & SOCKET_STREAM) == 0)
 			break;
 
-		if (listen(sd, 4) == 0) {
+		if (listen(sd, backlog) == 0) {
 #if TCP_FASTOPEN
 			if ((flags & SOCKET_FASTOPEN) != 0) {
 # if __APPLE__

@@ -78,7 +78,7 @@ enum {
 };
 int socket_broadcast(void);
 int socket_connect(const char *node, const char *service, int flags);
-int socket_listen(const char *node, const char *service, int flags);
+int socket_listen(const char *node, const char *service, int backlog, int flags);
 int socket_accept(int sd, struct endpoint *ep, int flags);
 
 enum {
