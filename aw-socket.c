@@ -281,17 +281,27 @@ int socket_accept(int sd, struct endpoint *ep, int flags) {
 	if ((res = accept(sd, (struct sockaddr *) &ep->addrbuf, &ep->addrlen)) < 0)
 		return -1;
 
+#if __APPLE__
+	{
+		int yes = 1;
+		if (setsockopt(res, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof yes) < 0) {
+			socket_close(res);
+			return -1;
+		}
+	}
+#endif
+
 	if ((flags & SOCKET_NONBLOCK) != 0) {
 #if _WIN32
 		DWORD nonblock = 1;
 		if (ioctlsocket(res, FIONBIO, &nonblock) < 0) {
 			socket_close(res);
-			res = -1;
+			return -1;
 		}
 #else
 		if (fcntl(res, F_SETFL, O_NONBLOCK) < 0) {
 			socket_close(res);
-			res = -1;
+			return -1;
 		}
 #endif
 	}
@@ -337,7 +347,11 @@ ssize_t socket_send(int sd, const void *p, size_t n) {
         ssize_t err, off, len;
 
         for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
+#if __linux__
+                if ((err = send(sd, (const char *) p + off, len, MSG_NOSIGNAL)) < 0)
+#else
                 if ((err = send(sd, (const char *) p + off, len, 0)) < 0)
+#endif
                         return err;
 
         return off;
@@ -348,7 +362,11 @@ ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
 }
 
 ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep) {
+#if __linux__
+	return sendto(sd, p, n, MSG_NOSIGNAL, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
+#else
 	return sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
+#endif
 }
 
 ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
