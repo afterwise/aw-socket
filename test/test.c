@@ -1,7 +1,6 @@
 
 #include "aw-socket.h"
 #include <arpa/inet.h>
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,7 +12,6 @@ int main(int argc, char *argv[]) {
 	struct endpoint ep;
 	char ipstr[46];
 	int sd, port;
-	ssize_t err;
 
 	(void) argc;
 	(void) argv;
@@ -35,12 +33,17 @@ int main(int argc, char *argv[]) {
 	sd = socket_connect("en.wikipedia.org", "http", SOCKET_STREAM);
 
 	strcpy(buf, REQUEST);
-	err = socket_send(sd, buf, sizeof REQUEST - 1);
+	socket_send(sd, buf, sizeof REQUEST - 1);
 
-	err = socket_recv(sd, buf, sizeof buf, SOCKET_WAITALL);
+	socket_recv(sd, buf, sizeof buf, 0);
 	printf("%s\n", buf);
 
-	err = socket_close(sd);
+	socket_shutdown(sd, SOCKET_BOTH);
+
+	while (socket_recv(sd, buf, sizeof buf, 0) > 0)
+		;
+
+	socket_close(sd);
 
 	return 0;
 }
