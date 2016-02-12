@@ -21,6 +21,19 @@
    THE SOFTWARE.
  */
 
+#ifndef _nofeatures
+# if _WIN32
+#  define WIN32_LEAN_AND_MEAN 1
+# elif __linux__
+#  define _BSD_SOURCE 1
+#  define _DEFAULT_SOURCE 1
+#  define _POSIX_C_SOURCE 200809L
+#  define _SVID_SOURCE 1
+# elif __APPLE__
+#  define _DARWIN_C_SOURCE 1
+# endif
+#endif /* _nofeatures */
+
 #include "aw-socket.h"
 
 #if _WIN32
@@ -33,6 +46,7 @@
 #endif
 
 #if __linux__ || __APPLE__
+# include <arpa/inet.h>
 # include <netinet/tcp.h>
 #endif
 
@@ -83,6 +97,16 @@ int socket_getname(
 	return getnameinfo(
 		(const struct sockaddr *) &ep->addrbuf, ep->addrlen,
 		node, SOCKET_MAXNODE, serv, SOCKET_MAXSERV, 0);
+}
+
+int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *ep) {
+	if (ep->addr.sin_family == AF_INET) {
+		inet_ntop(AF_INET, &ep->addr.sin_addr, str, SOCKET_MAXADDRSTRLEN);
+		return ntohs(ep->addr.sin_port);
+	} else {
+		inet_ntop(AF_INET6, &ep->addr6.sin6_addr, str, SOCKET_MAXADDRSTRLEN);
+		return ntohs(ep->addr6.sin6_port);
+	}
 }
 
 int socket_broadcast(void) {

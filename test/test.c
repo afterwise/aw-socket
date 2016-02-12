@@ -1,6 +1,18 @@
 
+#ifndef _nofeatures
+# if _WIN32
+#  define WIN32_LEAN_AND_MEAN 1
+# elif __linux__
+#  define _BSD_SOURCE 1
+#  define _DEFAULT_SOURCE 1
+#  define _POSIX_C_SOURCE 200809L
+#  define _SVID_SOURCE 1
+# elif __APPLE__
+#  define _DARWIN_C_SOURCE 1
+# endif
+#endif /* _nofeatures */
+
 #include "aw-socket.h"
-#include <arpa/inet.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -10,7 +22,7 @@ static char buf[4096];
 
 int main(int argc, char *argv[]) {
 	struct endpoint ep;
-	char ipstr[46];
+	char ipstr[SOCKET_MAXADDRSTRLEN];
 	int sd, port;
 
 	(void) argc;
@@ -19,15 +31,7 @@ int main(int argc, char *argv[]) {
 	socket_init();
 
 	socket_getaddr(&ep, "en.wikipedia.org", "http");
-
-	if (ep.addr.sin_family == AF_INET) {
-		port = ntohs(ep.addr.sin_port);
-		inet_ntop(AF_INET, &ep.addr.sin_addr, ipstr, sizeof ipstr);
-	} else {
-		port = ntohs(ep.addr6.sin6_port);
-		inet_ntop(AF_INET6, &ep.addr6.sin6_addr, ipstr, sizeof ipstr);
-	}
-
+	port = socket_tohuman(ipstr, &ep);
 	fprintf(stderr, "addr: %s @ %d\n\n", ipstr, port);
 
 	sd = socket_connect("en.wikipedia.org", "http", SOCKET_STREAM);

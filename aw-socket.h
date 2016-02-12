@@ -61,11 +61,13 @@ void socket_end(void);
 
 #define SOCKET_MAXNODE (NI_MAXHOST)
 #define SOCKET_MAXSERV (NI_MAXSERV)
+#define SOCKET_MAXADDRSTRLEN (INET6_ADDRSTRLEN)
 int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
 int socket_getname(
 	char node[_socket_staticsize SOCKET_MAXNODE],
 	char serv[_socket_staticsize SOCKET_MAXSERV],
 	const struct endpoint *ep);
+int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *ep);
 
 enum {
 	SOCKET_STREAM = 0x1,

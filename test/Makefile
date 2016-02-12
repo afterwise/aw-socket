@@ -1,5 +1,5 @@
 
-export CFLAGS += -Wall -Wextra
+export CFLAGS += -std=c99 -Wall -Wextra
 
 test: test.o ../libaw-socket.a
 	$(CC) $(LDFLAGS) -o $@ $^
