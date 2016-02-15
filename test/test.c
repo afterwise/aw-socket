@@ -30,11 +30,9 @@ int main(int argc, char *argv[]) {
 
 	socket_init();
 
-	socket_getaddr(&ep, "en.wikipedia.org", "http");
+	sd = socket_connect("en.wikipedia.org", "http", &ep, SOCKET_STREAM);
 	port = socket_tohuman(ipstr, &ep);
-	fprintf(stderr, "addr: %s @ %d\n\n", ipstr, port);
-
-	sd = socket_connect("en.wikipedia.org", "http", SOCKET_STREAM);
+	fprintf(stderr, "connect: %s#%d\n\n", ipstr, port);
 
 	strcpy(buf, REQUEST);
 	socket_send(sd, buf, sizeof REQUEST - 1);

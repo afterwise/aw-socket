@@ -62,12 +62,11 @@ void socket_end(void);
 #define SOCKET_MAXNODE (NI_MAXHOST)
 #define SOCKET_MAXSERV (NI_MAXSERV)
 #define SOCKET_MAXADDRSTRLEN (INET6_ADDRSTRLEN)
-int socket_getaddr(struct endpoint *ep, const char *node, const char *service);
 int socket_getname(
 	char node[_socket_staticsize SOCKET_MAXNODE],
 	char serv[_socket_staticsize SOCKET_MAXSERV],
-	const struct endpoint *ep);
-int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *ep);
+	const struct endpoint *endpoint);
+int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *endpoint);
 
 enum {
 	SOCKET_STREAM = 0x1,
@@ -79,9 +78,9 @@ enum {
 	SOCKET_DEFERACCEPT = 0x40
 };
 int socket_broadcast(void);
-int socket_connect(const char *node, const char *service, int flags);
-int socket_listen(const char *node, const char *service, int backlog, int flags);
-int socket_accept(int sd, struct endpoint *ep, int flags);
+int socket_connect(const char *node, const char *service, struct endpoint *endpoint, int flags);
+int socket_listen(const char *node, const char *service, struct endpoint *endpoint, int backlog, int flags);
+int socket_accept(int sd, struct endpoint *endpoint, int flags);
 
 enum {
 	SOCKET_RECV = 0,
@@ -97,8 +96,8 @@ enum {
 ssize_t socket_send(int sd, const void *p, size_t n);
 ssize_t socket_recv(int sd, void *p, size_t n, int flags);
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep);
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep);
+ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *endpoint);
+ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *endpoint);
 
 #ifdef __cplusplus
 } /* extern "C" */

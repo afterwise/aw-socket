@@ -72,40 +72,22 @@ void socket_end(void) {
 #endif
 }
 
-int socket_getaddr(struct endpoint *ep, const char *node, const char *service) {
-	struct addrinfo hints, *res;
-
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET6;
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-
-	if (getaddrinfo(node, service, &hints, &res) < 0)
-		return -1;
-
-	memcpy(&ep->addrbuf, res->ai_addr, res->ai_addrlen);
-	ep->addrlen = res->ai_addrlen;
-
-	freeaddrinfo(res);
-	return 0;
-}
-
 int socket_getname(
 		char node[_socket_staticsize SOCKET_MAXNODE],
 		char serv[_socket_staticsize SOCKET_MAXSERV],
-		const struct endpoint *ep) {
+		const struct endpoint *endpoint) {
 	return getnameinfo(
-		(const struct sockaddr *) &ep->addrbuf, ep->addrlen,
+		(const struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen,
 		node, SOCKET_MAXNODE, serv, SOCKET_MAXSERV, 0);
 }
 
-int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *ep) {
-	if (ep->addr.sin_family == AF_INET) {
-		inet_ntop(AF_INET, &ep->addr.sin_addr, str, SOCKET_MAXADDRSTRLEN);
-		return ntohs(ep->addr.sin_port);
+int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *endpoint) {
+	if (endpoint->addr.sin_family == AF_INET) {
+		inet_ntop(AF_INET, &endpoint->addr.sin_addr, str, SOCKET_MAXADDRSTRLEN);
+		return ntohs(endpoint->addr.sin_port);
 	} else {
-		inet_ntop(AF_INET6, &ep->addr6.sin6_addr, str, SOCKET_MAXADDRSTRLEN);
-		return ntohs(ep->addr6.sin6_port);
+		inet_ntop(AF_INET6, &endpoint->addr6.sin6_addr, str, SOCKET_MAXADDRSTRLEN);
+		return ntohs(endpoint->addr6.sin6_port);
 	}
 }
 
@@ -123,16 +105,40 @@ int socket_broadcast(void) {
 	return sd;
 }
 
-int socket_connect(const char *node, const char *service, int flags) {
-	struct addrinfo hints, *res, *ai;
-	int sd = -1;
-
+static int _getaddrinfo(
+		const char *node, const char *service, struct addrinfo **res, int flags,
+		int hint_flags) {
+	struct addrinfo hints;
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET6;
 	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
-	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hints.ai_flags = hint_flags;
+# ifdef AI_V4MAPPED
+	hints.ai_flags |= AI_V4MAPPED;
+# endif
+#ifdef AI_ADDRCONFIG
+	if (strcmp(node, "localhost") != 0 &&
+			strcmp(node, "localhost.localdomain") != 0 &&
+			strcmp(node, "localhost6") != 0 &&
+			strcmp(node, "localhost6.localdomain6") != 0)
+		hints.ai_flags |= AI_ADDRCONFIG;
+#endif
 
-	if (getaddrinfo(node, service, &hints, &res) < 0)
+	int err = getaddrinfo(node, service, &hints, res);
+#ifdef AI_ADDRCONFIG
+	if (err == EAI_BADFLAGS && (hints.ai_flags & AI_ADDRCONFIG) != 0) {
+		hints.ai_flags &= ~AI_ADDRCONFIG;
+		err = getaddrinfo(node, service, &hints, res);
+	}
+#endif
+	return (err == 0 ? 0 : -1);
+}
+
+int socket_connect(const char *node, const char *service, struct endpoint *endpoint, int flags) {
+	struct addrinfo *res, *ai;
+	int sd = -1;
+
+	if (_getaddrinfo(node, service, &res, flags, 0) < 0)
 		return -1;
 
 	for (ai = res; ai != NULL; ai = ai->ai_next) {
@@ -156,8 +162,13 @@ int socket_connect(const char *node, const char *service, int flags) {
 #endif
 		}
 
-		if ((flags & SOCKET_STREAM) == 0)
+		if ((flags & SOCKET_STREAM) == 0) {
+			if (endpoint != NULL) {
+				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+				endpoint->addrlen = ai->ai_addrlen;
+			}
 			break;
+		}
 
 		if ((flags & SOCKET_LINGER) == 0) {
 			struct linger l;
@@ -189,16 +200,31 @@ int socket_connect(const char *node, const char *service, int flags) {
 			if (connectx(
 					sd, &ep, SAE_ASSOCID_ANY,
 					CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT,
-					NULL, 0, NULL, NULL) == 0 || errno == EINPROGRESS)
+					NULL, 0, NULL, NULL) == 0 || errno == EINPROGRESS) {
+				if (endpoint != NULL) {
+					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+					endpoint->addrlen = ai->ai_addrlen;
+				}
 				break;
+			}
 # elif MSG_FASTOPEN
-			if (sendto(sd, "", 0, MSG_FASTOPEN, ai->ai_addr, ai->ai_addrlen) == 0)
+			if (sendto(sd, "", 0, MSG_FASTOPEN, ai->ai_addr, ai->ai_addrlen) == 0) {
+				if (endpoint != NULL) {
+					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+					endpoint->addrlen = ai->ai_addrlen;
+				}
 				break;
+			}
 # endif
 		}
 #endif
-		if (connect(sd, ai->ai_addr, ai->ai_addrlen) == 0 || errno == EINPROGRESS)
+		if (connect(sd, ai->ai_addr, ai->ai_addrlen) == 0 || errno == EINPROGRESS) {
+			if (endpoint != NULL) {
+				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+				endpoint->addrlen = ai->ai_addrlen;
+			}
 			break;
+		}
 
 		socket_close(sd);
 		sd = -1;
@@ -208,17 +234,12 @@ int socket_connect(const char *node, const char *service, int flags) {
 	return sd;
 }
 
-int socket_listen(const char *node, const char *service, int backlog, int flags) {
-	struct addrinfo hints, *res, *ai;
+int socket_listen(const char *node, const char *service, struct endpoint *endpoint, int backlog, int flags) {
+	struct addrinfo *res, *ai;
 	int sd = -1;
 	int val;
 
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET6;
-	hints.ai_socktype = ((flags & SOCKET_STREAM) != 0 ? SOCK_STREAM : SOCK_DGRAM);
-	hints.ai_flags = AI_PASSIVE | AI_V4MAPPED | AI_ADDRCONFIG;
-
-	if (getaddrinfo(node, service, &hints, &res) < 0)
+	if (_getaddrinfo(node, service, &res, flags, AI_PASSIVE) < 0)
 		return -1;
 
 	for (ai = res; ai != NULL; ai = ai->ai_next) {
@@ -268,8 +289,13 @@ int socket_listen(const char *node, const char *service, int backlog, int flags)
 			continue;
 		}
 
-		if ((flags & SOCKET_STREAM) == 0)
+		if ((flags & SOCKET_STREAM) == 0) {
+			if (endpoint != NULL) {
+				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+				endpoint->addrlen = ai->ai_addrlen;
+			}
 			break;
+		}
 
 		if (listen(sd, backlog) == 0) {
 #if TCP_FASTOPEN
@@ -286,6 +312,10 @@ int socket_listen(const char *node, const char *service, int backlog, int flags)
 				}
 			}
 #endif
+			if (endpoint != NULL) {
+				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
+				endpoint->addrlen = ai->ai_addrlen;
+			}
 			break;
 		}
 
@@ -297,12 +327,12 @@ int socket_listen(const char *node, const char *service, int backlog, int flags)
 	return sd;
 }
 
-int socket_accept(int sd, struct endpoint *ep, int flags) {
+int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 	int res;
 
-	ep->addrlen = sizeof ep->addrbuf;
+	endpoint->addrlen = sizeof endpoint->addrbuf;
 
-	if ((res = accept(sd, (struct sockaddr *) &ep->addrbuf, &ep->addrlen)) < 0)
+	if ((res = accept(sd, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen)) < 0)
 		return -1;
 
 #if __APPLE__
@@ -385,16 +415,16 @@ ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
 	return recv(sd, p, n, (flags & SOCKET_WAITALL) ? MSG_WAITALL : 0);
 }
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *ep) {
+ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *endpoint) {
 #if __linux__
-	return sendto(sd, p, n, MSG_NOSIGNAL, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
+	return sendto(sd, p, n, MSG_NOSIGNAL, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #else
-	return sendto(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, ep->addrlen);
+	return sendto(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #endif
 }
 
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *ep) {
-	ep->addrlen = sizeof ep->addrbuf;
-	return recvfrom(sd, p, n, 0, (struct sockaddr *) &ep->addrbuf, &ep->addrlen);
+ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *endpoint) {
+	endpoint->addrlen = sizeof endpoint->addrbuf;
+	return recvfrom(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
 }
 
