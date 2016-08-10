@@ -117,7 +117,8 @@ static int _getaddrinfo(
 	hints.ai_flags |= AI_V4MAPPED;
 # endif
 #ifdef AI_ADDRCONFIG
-	if (strcmp(node, "localhost") != 0 &&
+	if (node != NULL &&
+			strcmp(node, "localhost") != 0 &&
 			strcmp(node, "localhost.localdomain") != 0 &&
 			strcmp(node, "localhost6") != 0 &&
 			strcmp(node, "localhost6.localdomain6") != 0)
