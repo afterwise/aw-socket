@@ -24,6 +24,7 @@
 #ifndef _nofeatures
 # if _WIN32
 #  define WIN32_LEAN_AND_MEAN 1
+#  define _WIN32_WINNT 0x0600
 # elif __linux__
 #  define _BSD_SOURCE 1
 #  define _DEFAULT_SOURCE 1
@@ -97,7 +98,7 @@ int socket_broadcast(void) {
 	if ((sd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		return -1;
 
-	if (setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof broadcast) < 0) {
+	if (setsockopt(sd, SOL_SOCKET, SO_BROADCAST, (const void *) &broadcast, sizeof broadcast) < 0) {
 		socket_close(sd);
 		return -1;
 	}
@@ -175,7 +176,7 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 			struct linger l;
 			l.l_onoff = 1;
 			l.l_linger = 0;
-			if (setsockopt(sd, SOL_SOCKET, SO_LINGER, &l, sizeof l) < 0) {
+			if (setsockopt(sd, SOL_SOCKET, SO_LINGER, (const void *) &l, sizeof l) < 0) {
 				socket_close(sd);
 				sd = -1;
 				continue;
@@ -184,7 +185,7 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 
 		if ((flags & SOCKET_NODELAY) != 0) {
 			int yes = 1;
-			if (setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof yes) < 0) {
+			if (setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (const void *) &yes, sizeof yes) < 0) {
 				socket_close(sd);
 				sd = -1;
 				continue;
@@ -250,7 +251,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 #if __linux__
 		if ((flags & SOCKET_DEFERACCEPT) != 0) {
 			val = 5; /* secs */
-			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &val, sizeof val) < 0) {
+			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, (const void *) &val, sizeof val) < 0) {
 				socket_close(sd);
 				sd = -1;
 				continue;
@@ -277,7 +278,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 
 		if ((flags & SOCKET_REUSEADDR) != 0) {
 			val = 1; /* reuse */
-			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val) < 0) {
+			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (const void *) &val, sizeof val) < 0) {
 				socket_close(sd);
 				sd = -1;
 				continue;
@@ -306,7 +307,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 # else
 				val = 5; /* qlen */
 # endif
-				if (setsockopt(sd, IPPROTO_TCP, TCP_FASTOPEN, &val, sizeof val) < 0) {
+				if (setsockopt(sd, IPPROTO_TCP, TCP_FASTOPEN, (const void *) &val, sizeof val) < 0) {
 					socket_close(sd);
 					sd = -1;
 					continue;
@@ -339,7 +340,7 @@ int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 #if __APPLE__
 	{
 		int yes = 1;
-		if (setsockopt(res, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof yes) < 0) {
+		if (setsockopt(res, SOL_SOCKET, SO_NOSIGPIPE, (const void *) &yes, sizeof yes) < 0) {
 			socket_close(res);
 			return -1;
 		}
@@ -365,7 +366,7 @@ int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 		struct linger l;
 		l.l_onoff = 1;
 		l.l_linger = 0;
-		if (setsockopt(res, SOL_SOCKET, SO_LINGER, &l, sizeof l) < 0) {
+		if (setsockopt(res, SOL_SOCKET, SO_LINGER, (const void *) &l, sizeof l) < 0) {
 			socket_close(res);
 			return -1;
 		}
@@ -373,7 +374,7 @@ int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 
 	if ((flags & SOCKET_NODELAY) != 0) {
 		int yes = 1;
-		if (setsockopt(res, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof yes) < 0) {
+		if (setsockopt(res, IPPROTO_TCP, TCP_NODELAY, (const void *) &yes, sizeof yes) < 0) {
 			socket_close(res);
 			return -1;
 		}
