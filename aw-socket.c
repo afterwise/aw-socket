@@ -22,22 +22,22 @@
  */
 
 #ifndef _nofeatures
-# if _WIN32
+# if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN 1
 #  define _WIN32_WINNT 0x0600
-# elif __linux__
+# elif defined(__linux__)
 #  define _BSD_SOURCE 1
 #  define _DEFAULT_SOURCE 1
 #  define _POSIX_C_SOURCE 200809L
 #  define _SVID_SOURCE 1
-# elif __APPLE__
+# elif defined(__APPLE__)
 #  define _DARWIN_C_SOURCE 1
 # endif
 #endif /* _nofeatures */
 
 #include "aw-socket.h"
 
-#if _WIN32
+#if defined(_WIN32)
 # include <ws2tcpip.h>
 #else
 # include <netinet/in.h>
@@ -46,7 +46,7 @@
 # include <unistd.h>
 #endif
 
-#if __linux__ || __APPLE__
+#if defined(__linux__) || defined(__APPLE__)
 # include <arpa/inet.h>
 # include <netinet/tcp.h>
 #endif
@@ -57,7 +57,7 @@
 #include <string.h>
 
 void socket_init(void) {
-#if _WIN32
+#if defined(_WIN32)
 	WSADATA data;
 
 	if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
@@ -68,21 +68,21 @@ void socket_init(void) {
 }
 
 void socket_end(void) {
-#if _WIN32
+#if defined(_WIN32)
 	WSACleanup();
 #endif
 }
 
 int socket_getname(
-		char node[_socket_staticsize SOCKET_MAXNODE],
-		char serv[_socket_staticsize SOCKET_MAXSERV],
-		const struct endpoint *endpoint) {
+		char node[/*_socket_staticsize SOCKET_MAXNODE*/],
+		char serv[/*_socket_staticsize SOCKET_MAXSERV*/],
+		const struct socket_endpoint *endpoint) {
 	return getnameinfo(
 		(const struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen,
 		node, SOCKET_MAXNODE, serv, SOCKET_MAXSERV, 0);
 }
 
-int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *endpoint) {
+int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint) {
 	if (endpoint->addr.sin_family == AF_INET) {
 		inet_ntop(AF_INET, &endpoint->addr.sin_addr, str, SOCKET_MAXADDRSTRLEN);
 		return ntohs(endpoint->addr.sin_port);
@@ -136,7 +136,7 @@ static int _getaddrinfo(
 	return (err == 0 ? 0 : -1);
 }
 
-int socket_connect(const char *node, const char *service, struct endpoint *endpoint, int flags) {
+int socket_connect(const char *node, const char *service, struct socket_endpoint *endpoint, int flags) {
 	struct addrinfo *res, *ai;
 	int sd = -1;
 
@@ -148,7 +148,7 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 			continue;
 
 		if ((flags & SOCKET_NONBLOCK) != 0) {
-#if _WIN32
+#if defined(_WIN32)
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
@@ -192,9 +192,9 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 			}
 		}
 
-#if TCP_FASTOPEN
+#if defined(TCP_FASTOPEN)
 		if ((flags & SOCKET_FASTOPEN) != 0) {
-# if __APPLE__
+# if defined(__APPLE__)
 			sa_endpoints_t ep;
 			memset(&ep, 0, sizeof ep);
 			ep.sae_dstaddr = (struct sockaddr *) ai->ai_addr;
@@ -209,7 +209,7 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 				}
 				break;
 			}
-# elif MSG_FASTOPEN
+# elif defined(MSG_FASTOPEN)
 			if (sendto(sd, "", 0, MSG_FASTOPEN, ai->ai_addr, ai->ai_addrlen) == 0) {
 				if (endpoint != NULL) {
 					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
@@ -236,7 +236,7 @@ int socket_connect(const char *node, const char *service, struct endpoint *endpo
 	return sd;
 }
 
-int socket_listen(const char *node, const char *service, struct endpoint *endpoint, int backlog, int flags) {
+int socket_listen(const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags) {
 	struct addrinfo *res, *ai;
 	int sd = -1;
 	int val;
@@ -248,7 +248,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 		if ((sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) < 0)
 			continue;
 
-#if __linux__
+#if defined(__linux__)
 		if ((flags & SOCKET_DEFERACCEPT) != 0) {
 			val = 5; /* secs */
 			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, (const void *) &val, sizeof val) < 0) {
@@ -260,7 +260,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 #endif
 
 		if ((flags & SOCKET_NONBLOCK) != 0) {
-#if _WIN32
+#if defined(_WIN32)
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
@@ -300,9 +300,9 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 		}
 
 		if (listen(sd, backlog) == 0) {
-#if TCP_FASTOPEN
+#if defined(TCP_FASTOPEN)
 			if ((flags & SOCKET_FASTOPEN) != 0) {
-# if __APPLE__
+# if defined(__APPLE__)
 				val = 1; /* enable */
 # else
 				val = 5; /* qlen */
@@ -329,7 +329,7 @@ int socket_listen(const char *node, const char *service, struct endpoint *endpoi
 	return sd;
 }
 
-int socket_accept(int sd, struct endpoint *endpoint, int flags) {
+int socket_accept(int sd, struct socket_endpoint *endpoint, int flags) {
 	int res;
 
 	endpoint->addrlen = sizeof endpoint->addrbuf;
@@ -337,7 +337,7 @@ int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 	if ((res = accept(sd, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen)) < 0)
 		return -1;
 
-#if __APPLE__
+#if defined(__APPLE__)
 	{
 		int yes = 1;
 		if (setsockopt(res, SOL_SOCKET, SO_NOSIGPIPE, (const void *) &yes, sizeof yes) < 0) {
@@ -348,7 +348,7 @@ int socket_accept(int sd, struct endpoint *endpoint, int flags) {
 #endif
 
 	if ((flags & SOCKET_NONBLOCK) != 0) {
-#if _WIN32
+#if defined(_WIN32)
 		DWORD nonblock = 1;
 		if (ioctlsocket(res, FIONBIO, &nonblock) < 0) {
 			socket_close(res);
@@ -388,7 +388,7 @@ int socket_shutdown(int sd, int mode) {
 }
 
 int socket_close(int sd) {
-#if _WIN32
+#if defined(_WIN32)
 	if (closesocket(sd) == SOCKET_ERROR)
 		return -1;
 #else
@@ -399,11 +399,11 @@ int socket_close(int sd) {
 	return 0;
 }
 
-ssize_t socket_send(int sd, const void *p, size_t n) {
-        ssize_t err, off, len;
+socket_ssize_t socket_send(int sd, const void *p, size_t n) {
+        socket_ssize_t err, off, len;
 
         for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
-#if __linux__
+#if defined(__linux__)
                 if ((err = send(sd, (const char *) p + off, len, MSG_NOSIGNAL)) < 0)
 #else
                 if ((err = send(sd, (const char *) p + off, len, 0)) < 0)
@@ -413,19 +413,19 @@ ssize_t socket_send(int sd, const void *p, size_t n) {
         return off;
 }
 
-ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
+socket_ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
 	return recv(sd, p, n, (flags & SOCKET_WAITALL) ? MSG_WAITALL : 0);
 }
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *endpoint) {
-#if __linux__
+socket_ssize_t socket_sendto(int sd, const void *p, size_t n, const struct socket_endpoint *endpoint) {
+#if defined(__linux__)
 	return sendto(sd, p, n, MSG_NOSIGNAL, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #else
 	return sendto(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #endif
 }
 
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *endpoint) {
+socket_ssize_t socket_recvfrom(int sd, void *p, size_t n, struct socket_endpoint *endpoint) {
 	endpoint->addrlen = sizeof endpoint->addrbuf;
 	return recvfrom(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
 }

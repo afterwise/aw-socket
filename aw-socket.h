@@ -44,11 +44,17 @@ extern "C" {
 # define _socket_staticsize
 #endif
 
-#if _WIN32
+#if defined(_MSC_VER)
+typedef signed __int64 socket_ssize_t;
+#else
+typedef ssize_t socket_ssize_t;
+#endif
+
+#if defined(_WIN32)
 typedef int socklen_t;
 #endif
 
-struct endpoint {
+struct socket_endpoint {
 	union {
 		struct sockaddr_storage addrbuf;
 		struct sockaddr_in addr;
@@ -64,10 +70,10 @@ void socket_end(void);
 #define SOCKET_MAXSERV (NI_MAXSERV)
 #define SOCKET_MAXADDRSTRLEN (INET6_ADDRSTRLEN)
 int socket_getname(
-	char node[_socket_staticsize SOCKET_MAXNODE],
-	char serv[_socket_staticsize SOCKET_MAXSERV],
-	const struct endpoint *endpoint);
-int socket_tohuman(char str[_socket_staticsize SOCKET_MAXADDRSTRLEN], struct endpoint *endpoint);
+	char node[/*_socket_staticsize SOCKET_MAXNODE*/],
+	char serv[/*_socket_staticsize SOCKET_MAXSERV*/],
+	const struct socket_endpoint *endpoint);
+int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint);
 
 enum {
 	SOCKET_STREAM = 0x1,
@@ -79,9 +85,9 @@ enum {
 	SOCKET_DEFERACCEPT = 0x40
 };
 int socket_broadcast(void);
-int socket_connect(const char *node, const char *service, struct endpoint *endpoint, int flags);
-int socket_listen(const char *node, const char *service, struct endpoint *endpoint, int backlog, int flags);
-int socket_accept(int sd, struct endpoint *endpoint, int flags);
+int socket_connect(const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
+int socket_listen(const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
+int socket_accept(int sd, struct socket_endpoint *endpoint, int flags);
 
 enum {
 	SOCKET_RECV = 0,
@@ -94,11 +100,11 @@ int socket_close(int sd);
 enum {
 	SOCKET_WAITALL = 0x1
 };
-ssize_t socket_send(int sd, const void *p, size_t n);
-ssize_t socket_recv(int sd, void *p, size_t n, int flags);
+socket_ssize_t socket_send(int sd, const void *p, size_t n);
+socket_ssize_t socket_recv(int sd, void *p, size_t n, int flags);
 
-ssize_t socket_sendto(int sd, const void *p, size_t n, const struct endpoint *endpoint);
-ssize_t socket_recvfrom(int sd, void *p, size_t n, struct endpoint *endpoint);
+socket_ssize_t socket_sendto(int sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
+socket_ssize_t socket_recvfrom(int sd, void *p, size_t n, struct socket_endpoint *endpoint);
 
 #ifdef __cplusplus
 } /* extern "C" */
