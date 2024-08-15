@@ -23,14 +23,17 @@ static char buf[4096];
 int main(int argc, char *argv[]) {
 	struct endpoint ep;
 	char ipstr[SOCKET_MAXADDRSTRLEN];
-	int sd, port;
+	socket_t sd;
+	int port;
 
 	(void) argc;
 	(void) argv;
 
 	socket_init();
 
-	sd = socket_connect("en.wikipedia.org", "http", &ep, SOCKET_STREAM);
+	if (socket_connect(&sd, "en.wikipedia.org", "http", &ep, SOCKET_STREAM) < 0)
+		return 1;
+
 	port = socket_tohuman(ipstr, &ep);
 	fprintf(stderr, "connect: %s#%d\n\n", ipstr, port);
 

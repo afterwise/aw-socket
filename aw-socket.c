@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2016 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2024 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -92,8 +92,11 @@ int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct
 	}
 }
 
-int socket_broadcast(void) {
-	int sd, broadcast = 1;
+int socket_broadcast(socket_t* out_sd) {
+	socket_t sd;
+	int broadcast = 1;
+
+	*out_sd = 0;
 
 	if ((sd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 		return -1;
@@ -103,7 +106,8 @@ int socket_broadcast(void) {
 		return -1;
 	}
 
-	return sd;
+	*out_sd = sd;
+	return 0;
 }
 
 static int _getaddrinfo(
@@ -136,9 +140,10 @@ static int _getaddrinfo(
 	return (err == 0 ? 0 : -1);
 }
 
-int socket_connect(const char *node, const char *service, struct socket_endpoint *endpoint, int flags) {
+int socket_connect(socket_t* out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags) {
 	struct addrinfo *res, *ai;
-	int sd = -1;
+	socket_t sd = 0;
+	int err = -1;
 
 	if (_getaddrinfo(node, service, &res, flags, 0) < 0)
 		return -1;
@@ -152,13 +157,13 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 #else
 			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 #endif
@@ -167,8 +172,9 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 		if ((flags & SOCKET_STREAM) == 0) {
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
-				endpoint->addrlen = ai->ai_addrlen;
+				endpoint->addrlen = (socklen_t) ai->ai_addrlen;
 			}
+			err = 0;
 			break;
 		}
 
@@ -178,7 +184,7 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 			l.l_linger = 0;
 			if (setsockopt(sd, SOL_SOCKET, SO_LINGER, (const void *) &l, sizeof l) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 		}
@@ -187,7 +193,7 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 			int yes = 1;
 			if (setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (const void *) &yes, sizeof yes) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 		}
@@ -207,6 +213,7 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
 					endpoint->addrlen = ai->ai_addrlen;
 				}
+				err = 0;
 				break;
 			}
 # elif defined(MSG_FASTOPEN)
@@ -215,30 +222,34 @@ int socket_connect(const char *node, const char *service, struct socket_endpoint
 					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
 					endpoint->addrlen = ai->ai_addrlen;
 				}
+				err = 0;
 				break;
 			}
 # endif
 		}
 #endif
-		if (connect(sd, ai->ai_addr, ai->ai_addrlen) == 0 || errno == EINPROGRESS) {
+		if (connect(sd, ai->ai_addr, (socklen_t) ai->ai_addrlen) == 0 || errno == EINPROGRESS) {
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
-				endpoint->addrlen = ai->ai_addrlen;
+				endpoint->addrlen = (socklen_t) ai->ai_addrlen;
 			}
+			err = 0;
 			break;
 		}
 
 		socket_close(sd);
-		sd = -1;
+		err = -1;
 	}
 
 	freeaddrinfo(res);
-	return sd;
+	*out_sd = err >= 0 ? sd : 0;
+	return err;
 }
 
-int socket_listen(const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags) {
+int socket_listen(socket_t* out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags) {
 	struct addrinfo *res, *ai;
-	int sd = -1;
+	socket_t sd = 0;
+	int err = -1;
 	int val;
 
 	if (_getaddrinfo(node, service, &res, flags, AI_PASSIVE) < 0)
@@ -253,7 +264,7 @@ int socket_listen(const char *node, const char *service, struct socket_endpoint 
 			val = 5; /* secs */
 			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, (const void *) &val, sizeof val) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 		}
@@ -264,13 +275,13 @@ int socket_listen(const char *node, const char *service, struct socket_endpoint 
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 #else
 			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 #endif
@@ -280,22 +291,23 @@ int socket_listen(const char *node, const char *service, struct socket_endpoint 
 			val = 1; /* reuse */
 			if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (const void *) &val, sizeof val) < 0) {
 				socket_close(sd);
-				sd = -1;
+				err = -1;
 				continue;
 			}
 		}
 
-		if (bind(sd, ai->ai_addr, ai->ai_addrlen) < 0) {
+		if (bind(sd, ai->ai_addr, (socklen_t) ai->ai_addrlen) < 0) {
 			socket_close(sd);
-			sd = -1;
+			err = -1;
 			continue;
 		}
 
 		if ((flags & SOCKET_STREAM) == 0) {
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
-				endpoint->addrlen = ai->ai_addrlen;
+				endpoint->addrlen = (socklen_t) ai->ai_addrlen;
 			}
+			err = 0;
 			break;
 		}
 
@@ -309,29 +321,32 @@ int socket_listen(const char *node, const char *service, struct socket_endpoint 
 # endif
 				if (setsockopt(sd, IPPROTO_TCP, TCP_FASTOPEN, (const void *) &val, sizeof val) < 0) {
 					socket_close(sd);
-					sd = -1;
+					err = -1;
 					continue;
 				}
 			}
 #endif
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
-				endpoint->addrlen = ai->ai_addrlen;
+				endpoint->addrlen = (socklen_t) ai->ai_addrlen;
 			}
+			err = 0;
 			break;
 		}
 
 		socket_close(sd);
-		sd = -1;
+		err = -1;
 	}
 
 	freeaddrinfo(res);
-	return sd;
+	*out_sd = err >= 0 ? sd : 0;
+	return err;
 }
 
-int socket_accept(int sd, struct socket_endpoint *endpoint, int flags) {
-	int res;
+int socket_accept(socket_t* out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags) {
+	socket_t res;
 
+	*out_sd = 0;
 	endpoint->addrlen = sizeof endpoint->addrbuf;
 
 	if ((res = accept(sd, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen)) < 0)
@@ -380,14 +395,15 @@ int socket_accept(int sd, struct socket_endpoint *endpoint, int flags) {
 		}
 	}
 
-	return res;
+	*out_sd = res;
+	return 0;
 }
 
-int socket_shutdown(int sd, int mode) {
+int socket_shutdown(socket_t sd, int mode) {
 	return shutdown(sd, mode);
 }
 
-int socket_close(int sd) {
+int socket_close(socket_t sd) {
 #if defined(_WIN32)
 	if (closesocket(sd) == SOCKET_ERROR)
 		return -1;
@@ -399,34 +415,34 @@ int socket_close(int sd) {
 	return 0;
 }
 
-socket_ssize_t socket_send(int sd, const void *p, size_t n) {
+socket_ssize_t socket_send(socket_t sd, const void *p, size_t n) {
         socket_ssize_t err, off, len;
 
         for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
 #if defined(__linux__)
-                if ((err = send(sd, (const char *) p + off, len, MSG_NOSIGNAL)) < 0)
+                if ((err = send(sd, (const char *) p + off, (int) len, MSG_NOSIGNAL)) < 0)
 #else
-                if ((err = send(sd, (const char *) p + off, len, 0)) < 0)
+                if ((err = send(sd, (const char *) p + off, (int) len, 0)) < 0)
 #endif
                         return err;
 
         return off;
 }
 
-socket_ssize_t socket_recv(int sd, void *p, size_t n, int flags) {
-	return recv(sd, p, n, (flags & SOCKET_WAITALL) ? MSG_WAITALL : 0);
+socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags) {
+	return recv(sd, p, (int) n, (flags & SOCKET_WAITALL) ? MSG_WAITALL : 0);
 }
 
-socket_ssize_t socket_sendto(int sd, const void *p, size_t n, const struct socket_endpoint *endpoint) {
+socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint) {
 #if defined(__linux__)
-	return sendto(sd, p, n, MSG_NOSIGNAL, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
+	return sendto(sd, p, (int) n, MSG_NOSIGNAL, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #else
-	return sendto(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
+	return sendto(sd, p, (int) n, 0, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #endif
 }
 
-socket_ssize_t socket_recvfrom(int sd, void *p, size_t n, struct socket_endpoint *endpoint) {
+socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint) {
 	endpoint->addrlen = sizeof endpoint->addrbuf;
-	return recvfrom(sd, p, n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
+	return recvfrom(sd, p, (int) n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
 }
 

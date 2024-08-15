@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2016 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2024 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -52,6 +52,9 @@ typedef ssize_t socket_ssize_t;
 
 #if defined(_WIN32)
 typedef int socklen_t;
+typedef intptr_t socket_t;
+#else
+typedef int socket_t;
 #endif
 
 struct socket_endpoint {
@@ -84,27 +87,27 @@ enum {
 	SOCKET_FASTOPEN = 0x20,
 	SOCKET_DEFERACCEPT = 0x40
 };
-int socket_broadcast(void);
-int socket_connect(const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
-int socket_listen(const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
-int socket_accept(int sd, struct socket_endpoint *endpoint, int flags);
+int socket_broadcast(socket_t* out_sd);
+int socket_connect(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
+int socket_listen(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
+int socket_accept(socket_t *out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags);
 
 enum {
 	SOCKET_RECV = 0,
 	SOCKET_SEND = 1,
 	SOCKET_BOTH = 2
 };
-int socket_shutdown(int sd, int mode);
-int socket_close(int sd);
+int socket_shutdown(socket_t sd, int mode);
+int socket_close(socket_t sd);
 
 enum {
 	SOCKET_WAITALL = 0x1
 };
-socket_ssize_t socket_send(int sd, const void *p, size_t n);
-socket_ssize_t socket_recv(int sd, void *p, size_t n, int flags);
+socket_ssize_t socket_send(socket_t sd, const void *p, size_t n);
+socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags);
 
-socket_ssize_t socket_sendto(int sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
-socket_ssize_t socket_recvfrom(int sd, void *p, size_t n, struct socket_endpoint *endpoint);
+socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
+socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
 
 #ifdef __cplusplus
 } /* extern "C" */
