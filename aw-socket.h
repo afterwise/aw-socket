@@ -57,6 +57,11 @@ typedef intptr_t socket_t;
 typedef int socket_t;
 #endif
 
+#if defined(_MSC_VER)
+# pragma warning(push)
+# pragma warning(disable : 4201)
+#endif
+
 struct socket_endpoint {
 	union {
 		struct sockaddr_storage addrbuf;
@@ -65,6 +70,10 @@ struct socket_endpoint {
 	};
 	socklen_t addrlen;
 };
+
+#if defined(_MSC_VER)
+# pragma warning(pop)
+#endif
 
 void socket_init(void);
 void socket_end(void);
