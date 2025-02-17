@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2024 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2025 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,7 @@
 #include "aw-socket.h"
 
 #if defined(_WIN32)
+# include <mswsock.h>
 # include <ws2tcpip.h>
 #else
 # include <netinet/in.h>
@@ -51,10 +52,18 @@
 # include <netinet/tcp.h>
 #endif
 
+#if defined(__linux__)
+# include <sys/sendfile.h>
+#endif
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32)
+# pragma comment(lib, "mswsock.lib")
+#endif
 
 void socket_init(void) {
 #if defined(_WIN32)
@@ -444,5 +453,32 @@ socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct 
 socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint) {
 	endpoint->addrlen = sizeof endpoint->addrbuf;
 	return recvfrom(sd, p, (int) n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
+}
+
+socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
+#if defined(_WIN32)
+	if (!TransmitFile(sd, (HANDLE) fd, (DWORD) n, 0, NULL, NULL, 0))
+		return -1;
+
+	return n;
+#elif defined(__linux__)
+	ssize_t err;
+	off_t off, len;
+
+	for (off = 0, len = n; len != 0; len = n - off)
+		if ((err = sendfile(sd, fd, &off, len)) < 0)
+			return -1;
+
+	return off;
+#elif defined(__APPLE__)
+	ssize_t err, off;
+	off_t len;
+
+	for (off = 0, len = n; len != 0; off += len, len = n - off)
+		if ((err = sendfile(fd, sd, off, &len, NULL, 0)) < 0)
+			return -1;
+
+	return off;
+#endif
 }
 

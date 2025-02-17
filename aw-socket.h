@@ -1,6 +1,6 @@
 
 /*
-   Copyright (c) 2014-2024 Malte Hildingsson, malte (at) afterwi.se
+   Copyright (c) 2014-2025 Malte Hildingsson, malte (at) afterwi.se
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -117,6 +117,8 @@ socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags);
 
 socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
 socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
+
+socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
 
 #ifdef __cplusplus
 } /* extern "C" */
