@@ -24,7 +24,7 @@
 #ifndef AW_SOCKET_H
 #define AW_SOCKET_H
 
-#if _WIN32
+#if defined(_WIN32)
 # include <winsock2.h>
 # include <ws2tcpip.h>
 # include <sys/types.h>
