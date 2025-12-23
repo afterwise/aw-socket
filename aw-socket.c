@@ -63,6 +63,7 @@
 
 #if defined(_WIN32)
 # pragma comment(lib, "mswsock.lib")
+# pragma comment(lib, "ws2_32.lib")
 #endif
 
 void socket_init(void) {
