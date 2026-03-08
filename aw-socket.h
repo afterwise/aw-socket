@@ -31,7 +31,12 @@
 #else
 # include <netinet/in.h>
 # include <sys/socket.h>
-# include <netdb.h>
+# if defined(__SCE__)
+#  include <net6.h>
+#  include <netinet6/in6.h>
+# else
+#  include <netdb.h>
+# endif
 #endif
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1600
@@ -85,10 +90,12 @@ void socket_end(void);
 #define SOCKET_MAXNODE (NI_MAXHOST)
 #define SOCKET_MAXSERV (NI_MAXSERV)
 #define SOCKET_MAXADDRSTRLEN (INET6_ADDRSTRLEN)
+#if !defined(__SCE__)
 int socket_getname(
 	char node[/*_socket_staticsize SOCKET_MAXNODE*/],
 	char serv[/*_socket_staticsize SOCKET_MAXSERV*/],
 	const struct socket_endpoint *endpoint);
+#endif
 int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint);
 
 enum {
@@ -102,8 +109,10 @@ enum {
 };
 int socket_broadcast(socket_t* out_sd);
 int socket_connect(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
+#if !defined(__SCE__)
 int socket_listen(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
 int socket_accept(socket_t *out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags);
+#endif
 
 enum {
 	SOCKET_RECV = 0,
@@ -122,7 +131,9 @@ socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags);
 socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
 socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
 
+#if !defined(__SCE__)
 socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

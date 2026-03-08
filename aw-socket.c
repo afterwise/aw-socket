@@ -43,11 +43,10 @@
 #else
 # include <netinet/in.h>
 # include <fcntl.h>
-# include <netdb.h>
 # include <unistd.h>
 #endif
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__SCE__)
 # include <arpa/inet.h>
 # include <netinet/tcp.h>
 #endif
@@ -83,6 +82,7 @@ void socket_end(void) {
 #endif
 }
 
+#if !defined(__SCE__)
 int socket_getname(
 		char node[/*_socket_staticsize SOCKET_MAXNODE*/],
 		char serv[/*_socket_staticsize SOCKET_MAXSERV*/],
@@ -91,6 +91,7 @@ int socket_getname(
 		(const struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen,
 		node, SOCKET_MAXNODE, serv, SOCKET_MAXSERV, 0);
 }
+#endif
 
 int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint) {
 	if (endpoint->addr.sin_family == AF_INET) {
@@ -120,6 +121,7 @@ int socket_broadcast(socket_t* out_sd) {
 	return 0;
 }
 
+#if !defined(__SCE__)
 static int _getaddrinfo(
 		const char *node, const char *service, struct addrinfo **res, int flags,
 		int hint_flags) {
@@ -131,26 +133,50 @@ static int _getaddrinfo(
 # ifdef AI_V4MAPPED
 	hints.ai_flags |= AI_V4MAPPED;
 # endif
-#ifdef AI_ADDRCONFIG
+# ifdef AI_ADDRCONFIG
 	if (node != NULL &&
 			strcmp(node, "localhost") != 0 &&
 			strcmp(node, "localhost.localdomain") != 0 &&
 			strcmp(node, "localhost6") != 0 &&
 			strcmp(node, "localhost6.localdomain6") != 0)
 		hints.ai_flags |= AI_ADDRCONFIG;
-#endif
+# endif
 
 	int err = getaddrinfo(node, service, &hints, res);
-#ifdef AI_ADDRCONFIG
+# ifdef AI_ADDRCONFIG
 	if (err == EAI_BADFLAGS && (hints.ai_flags & AI_ADDRCONFIG) != 0) {
 		hints.ai_flags &= ~AI_ADDRCONFIG;
 		err = getaddrinfo(node, service, &hints, res);
 	}
-#endif
+# endif
 	return (err == 0 ? 0 : -1);
 }
+#endif // !defined(__SCE__)
 
 int socket_connect(socket_t* out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags) {
+#if defined(__SCE__)
+	SceNetResolverConnectInfo rc;
+	SceNetResolverConnectParam rp;
+	int port = atoi(service); // XXX
+	int type = (flags & SOCKET_STREAM) != 0 ? SCE_NET_SOCK_STREAM : SCE_NET_SOCK_DGRAM;
+	int err;
+	if (port <= 0 || port >= 65536)
+		return -1;
+	memset(&rc, 0, sizeof rc);
+	if ((err = sceNetResolverConnectCreate("aw-socket", type, &rc, 0)) < 0) {
+		*out_sd = 0;
+		return err;
+	}
+	memset(&rp, 0, sizeof rp);
+	err = sceNetResolverConnect(&rc, node, port, &rp);
+	sceNetResolverConnectDestroy(&rc);
+	if (err < 0) {
+		out_sd = 0;
+		return err;
+	}
+	*out_sd = err;
+	return 0;
+#else // !defined(__SCE__)
 	struct addrinfo *res, *ai;
 	socket_t sd = 0;
 	int err = -1;
@@ -163,20 +189,20 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 			continue;
 
 		if ((flags & SOCKET_NONBLOCK) != 0) {
-#if defined(_WIN32)
+# if defined(_WIN32)
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
 				err = -1;
 				continue;
 			}
-#else
+# else
 			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
 				socket_close(sd);
 				err = -1;
 				continue;
 			}
-#endif
+# endif
 		}
 
 		if ((flags & SOCKET_STREAM) == 0) {
@@ -208,9 +234,9 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 			}
 		}
 
-#if defined(TCP_FASTOPEN)
+# if defined(TCP_FASTOPEN)
 		if ((flags & SOCKET_FASTOPEN) != 0) {
-# if defined(__APPLE__)
+#  if defined(__APPLE__)
 			sa_endpoints_t ep;
 			memset(&ep, 0, sizeof ep);
 			ep.sae_dstaddr = (struct sockaddr *) ai->ai_addr;
@@ -226,7 +252,7 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 				err = 0;
 				break;
 			}
-# elif defined(MSG_FASTOPEN)
+#  elif defined(MSG_FASTOPEN)
 			if (sendto(sd, "", 0, MSG_FASTOPEN, ai->ai_addr, ai->ai_addrlen) == 0) {
 				if (endpoint != NULL) {
 					memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
@@ -235,9 +261,9 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 				err = 0;
 				break;
 			}
-# endif
+#  endif
 		}
-#endif
+# endif
 		if (connect(sd, ai->ai_addr, (socklen_t) ai->ai_addrlen) == 0 || errno == EINPROGRESS) {
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
@@ -254,8 +280,10 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 	freeaddrinfo(res);
 	*out_sd = err >= 0 ? sd : 0;
 	return err;
+#endif // !defined(__SCE__)
 }
 
+#if !defined(__SCE__)
 int socket_listen(socket_t* out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags) {
 	struct addrinfo *res, *ai;
 	socket_t sd = 0;
@@ -269,7 +297,7 @@ int socket_listen(socket_t* out_sd, const char *node, const char *service, struc
 		if ((sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) < 0)
 			continue;
 
-#if defined(__linux__)
+# if defined(__linux__)
 		if ((flags & SOCKET_DEFERACCEPT) != 0) {
 			val = 5; /* secs */
 			if (setsockopt(sd, IPPROTO_TCP, TCP_DEFER_ACCEPT, (const void *) &val, sizeof val) < 0) {
@@ -278,23 +306,23 @@ int socket_listen(socket_t* out_sd, const char *node, const char *service, struc
 				continue;
 			}
 		}
-#endif
+# endif
 
 		if ((flags & SOCKET_NONBLOCK) != 0) {
-#if defined(_WIN32)
+# if defined(_WIN32)
 			DWORD nonblock = 1;
 			if (ioctlsocket(sd, FIONBIO, &nonblock) < 0) {
 				socket_close(sd);
 				err = -1;
 				continue;
 			}
-#else
+# else
 			if (fcntl(sd, F_SETFL, O_NONBLOCK) < 0) {
 				socket_close(sd);
 				err = -1;
 				continue;
 			}
-#endif
+# endif
 		}
 
 		if ((flags & SOCKET_REUSEADDR) != 0) {
@@ -322,20 +350,20 @@ int socket_listen(socket_t* out_sd, const char *node, const char *service, struc
 		}
 
 		if (listen(sd, backlog) == 0) {
-#if defined(TCP_FASTOPEN)
+# if defined(TCP_FASTOPEN)
 			if ((flags & SOCKET_FASTOPEN) != 0) {
-# if defined(__APPLE__)
+#  if defined(__APPLE__)
 				val = 1; /* enable */
-# else
+#  else
 				val = 5; /* qlen */
-# endif
+#  endif
 				if (setsockopt(sd, IPPROTO_TCP, TCP_FASTOPEN, (const void *) &val, sizeof val) < 0) {
 					socket_close(sd);
 					err = -1;
 					continue;
 				}
 			}
-#endif
+# endif
 			if (endpoint != NULL) {
 				memcpy(&endpoint->addrbuf, ai->ai_addr, ai->ai_addrlen);
 				endpoint->addrlen = (socklen_t) ai->ai_addrlen;
@@ -352,7 +380,9 @@ int socket_listen(socket_t* out_sd, const char *node, const char *service, struc
 	*out_sd = err >= 0 ? sd : 0;
 	return err;
 }
+#endif // !defined(__SCE__)
 
+#if !defined(__SCE__)
 int socket_accept(socket_t* out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags) {
 	socket_t res;
 
@@ -362,7 +392,7 @@ int socket_accept(socket_t* out_sd, socket_t sd, struct socket_endpoint *endpoin
 	if ((res = accept(sd, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen)) < 0)
 		return -1;
 
-#if defined(__APPLE__)
+# if defined(__APPLE__)
 	{
 		int yes = 1;
 		if (setsockopt(res, SOL_SOCKET, SO_NOSIGPIPE, (const void *) &yes, sizeof yes) < 0) {
@@ -370,21 +400,21 @@ int socket_accept(socket_t* out_sd, socket_t sd, struct socket_endpoint *endpoin
 			return -1;
 		}
 	}
-#endif
+# endif
 
 	if ((flags & SOCKET_NONBLOCK) != 0) {
-#if defined(_WIN32)
+# if defined(_WIN32)
 		DWORD nonblock = 1;
 		if (ioctlsocket(res, FIONBIO, &nonblock) < 0) {
 			socket_close(res);
 			return -1;
 		}
-#else
+# else
 		if (fcntl(res, F_SETFL, O_NONBLOCK) < 0) {
 			socket_close(res);
 			return -1;
 		}
-#endif
+# endif
 	}
 
 	if ((flags & SOCKET_LINGER) == 0) {
@@ -408,15 +438,22 @@ int socket_accept(socket_t* out_sd, socket_t sd, struct socket_endpoint *endpoin
 	*out_sd = res;
 	return 0;
 }
+#endif // !defined(__SCE__)
 
 int socket_shutdown(socket_t sd, int mode) {
+#if defined(__SCE__)
+	return sceNetShutdown(sd, mode);
+#else
 	return shutdown(sd, mode);
+#endif
 }
 
 int socket_close(socket_t sd) {
 #if defined(_WIN32)
 	if (closesocket(sd) == SOCKET_ERROR)
 		return -1;
+#elif defined(__SCE__)
+	sceNetSocketClose(sd);
 #else
 	if (close(sd) < 0)
 		return -1;
@@ -431,6 +468,8 @@ socket_ssize_t socket_send(socket_t sd, const void *p, size_t n) {
         for (off = 0, len = n; len != 0; off += err > 0 ? err : 0, len = n - off)
 #if defined(__linux__)
                 if ((err = send(sd, (const char *) p + off, (int) len, MSG_NOSIGNAL)) < 0)
+#elif defined(__SCE__)
+                if ((err = sceNetSend(sd, (const char *) p + off, (int) len, 0)) < 0)
 #else
                 if ((err = send(sd, (const char *) p + off, (int) len, 0)) < 0)
 #endif
@@ -446,6 +485,8 @@ socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags) {
 socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint) {
 #if defined(__linux__)
 	return sendto(sd, p, (int) n, MSG_NOSIGNAL, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
+#elif defined(__SCE__)
+	return sceNetSendto(sd, p, (int) n, MSG_NOSIGNAL, (struct SceNetSockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #else
 	return sendto(sd, p, (int) n, 0, (struct sockaddr *) &endpoint->addrbuf, endpoint->addrlen);
 #endif
@@ -453,16 +494,25 @@ socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct 
 
 socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint) {
 	endpoint->addrlen = sizeof endpoint->addrbuf;
+#if defined(__SCE__)
+	return sceNetRecvfrom(sd, p, n, 0, (struct SceNetSockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
+#else
 	return recvfrom(sd, p, (int) n, 0, (struct sockaddr *) &endpoint->addrbuf, &endpoint->addrlen);
+#endif
 }
 
+#if !defined(__SCE__)
 socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
-#if defined(_WIN32)
+# if defined(_WIN32)
+#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_GAMES)
+	return -1;
+#  else
 	if (!TransmitFile(sd, (HANDLE) fd, (DWORD) n, 0, NULL, NULL, 0))
 		return -1;
 
 	return n;
-#elif defined(__linux__)
+#  endif
+# elif defined(__linux__)
 	ssize_t err;
 	off_t off, len;
 
@@ -471,7 +521,7 @@ socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 			return -1;
 
 	return off;
-#elif defined(__APPLE__)
+# elif defined(__APPLE__)
 	ssize_t err, off;
 	off_t len;
 
@@ -480,6 +530,7 @@ socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 			return -1;
 
 	return off;
-#endif
+# endif
 }
+#endif // !defined(__SCE__)
 
