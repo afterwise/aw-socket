@@ -504,7 +504,10 @@ socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_end
 #if !defined(__SCE__)
 socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 # if defined(_WIN32)
-#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_GAMES)
+#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_GAMES) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+	(void) sd;
+	(void) fd;
+	(void) n;
 	return -1;
 #  else
 	if (!TransmitFile(sd, (HANDLE) fd, (DWORD) n, 0, NULL, NULL, 0))
