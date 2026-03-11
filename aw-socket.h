@@ -43,6 +43,21 @@
 # include <stdint.h>
 #endif
 
+#if defined(_socket_dllexport)
+# if defined(_MSC_VER)
+#  define _socket_api extern __declspec(dllexport)
+# elif defined(__GNUC__)
+#  define _socket_api __attribute__((visibility("default"))) extern
+# endif
+#elif defined(_socket_dllimport)
+# if defined(_MSC_VER)
+#  define _socket_api extern __declspec(dllimport)
+# endif
+#endif
+#ifndef _socket_api
+# define _socket_api extern
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -84,19 +99,19 @@ struct socket_endpoint {
 # pragma warning(pop)
 #endif
 
-void socket_init(void);
-void socket_end(void);
+_socket_api void socket_init(void);
+_socket_api void socket_end(void);
 
 #define SOCKET_MAXNODE (NI_MAXHOST)
 #define SOCKET_MAXSERV (NI_MAXSERV)
 #define SOCKET_MAXADDRSTRLEN (INET6_ADDRSTRLEN)
 #if !defined(__SCE__)
-int socket_getname(
+_socket_api int socket_getname(
 	char node[/*_socket_staticsize SOCKET_MAXNODE*/],
 	char serv[/*_socket_staticsize SOCKET_MAXSERV*/],
 	const struct socket_endpoint *endpoint);
 #endif
-int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint);
+_socket_api int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct socket_endpoint *endpoint);
 
 enum {
 	SOCKET_STREAM = 0x1,
@@ -107,11 +122,11 @@ enum {
 	SOCKET_FASTOPEN = 0x20,
 	SOCKET_DEFERACCEPT = 0x40
 };
-int socket_broadcast(socket_t* out_sd);
-int socket_connect(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
+_socket_api int socket_broadcast(socket_t* out_sd);
+_socket_api int socket_connect(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int flags);
 #if !defined(__SCE__)
-int socket_listen(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
-int socket_accept(socket_t *out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags);
+_socket_api int socket_listen(socket_t *out_sd, const char *node, const char *service, struct socket_endpoint *endpoint, int backlog, int flags);
+_socket_api int socket_accept(socket_t *out_sd, socket_t sd, struct socket_endpoint *endpoint, int flags);
 #endif
 
 enum {
@@ -119,20 +134,20 @@ enum {
 	SOCKET_SEND = 1,
 	SOCKET_BOTH = 2
 };
-int socket_shutdown(socket_t sd, int mode);
-int socket_close(socket_t sd);
+_socket_api int socket_shutdown(socket_t sd, int mode);
+_socket_api int socket_close(socket_t sd);
 
 enum {
 	SOCKET_WAITALL = 0x1
 };
-socket_ssize_t socket_send(socket_t sd, const void *p, size_t n);
-socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags);
+_socket_api socket_ssize_t socket_send(socket_t sd, const void *p, size_t n);
+_socket_api socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags);
 
-socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
-socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
+_socket_api socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
+_socket_api socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
 
 #if !defined(__SCE__)
-socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
+_socket_api socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
 #endif
 
 #ifdef __cplusplus
