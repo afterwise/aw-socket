@@ -98,8 +98,14 @@ int socket_tohuman(char str[/*_socket_staticsize SOCKET_MAXADDRSTRLEN*/], struct
 		inet_ntop(AF_INET, &endpoint->addr.sin_addr, str, SOCKET_MAXADDRSTRLEN);
 		return ntohs(endpoint->addr.sin_port);
 	} else {
+#if !defined(__ORBIS__)
 		inet_ntop(AF_INET6, &endpoint->addr6.sin6_addr, str, SOCKET_MAXADDRSTRLEN);
 		return ntohs(endpoint->addr6.sin6_port);
+#else
+		(void) str;
+		(void) endpoint;
+		return -1;
+#endif
 	}
 }
 
@@ -168,7 +174,7 @@ int socket_connect(socket_t* out_sd, const char *node, const char *service, stru
 		return err;
 	}
 	memset(&rp, 0, sizeof rp);
-	err = sceNetResolverConnect(&rc, node, port, &rp);
+	err = sceNetResolverConnect(&rc, node, (SceNetInPort_t) port, &rp);
 	sceNetResolverConnectDestroy(&rc);
 	if (err < 0) {
 		out_sd = 0;

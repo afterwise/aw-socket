@@ -33,7 +33,9 @@
 # include <sys/socket.h>
 # if defined(__SCE__)
 #  include <net6.h>
-#  include <netinet6/in6.h>
+#  if !defined(__ORBIS__)
+#   include <netinet6/in6.h>
+#  endif
 # else
 #  include <netdb.h>
 # endif
@@ -90,7 +92,9 @@ struct socket_endpoint {
 	union {
 		struct sockaddr_storage addrbuf;
 		struct sockaddr_in addr;
+#if !defined(__ORBIS__)
 		struct sockaddr_in6 addr6;
+#endif
 	};
 	socklen_t addrlen;
 };
