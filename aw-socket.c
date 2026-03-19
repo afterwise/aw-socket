@@ -60,7 +60,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined(_GAMING_XBOX)
 # pragma comment(lib, "mswsock.lib")
 # pragma comment(lib, "ws2_32.lib")
 #endif
@@ -507,20 +507,13 @@ socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_end
 #endif
 }
 
-#if !defined(__SCE__)
+#if !defined(_GAMING_XBOX) && !defined(__SCE__)
 socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 # if defined(_WIN32)
-#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_GAMES) && !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-	(void) sd;
-	(void) fd;
-	(void) n;
-	return -1;
-#  else
 	if (!TransmitFile(sd, (HANDLE) fd, (DWORD) n, 0, NULL, NULL, 0))
 		return -1;
 
 	return n;
-#  endif
 # elif defined(__linux__)
 	ssize_t err;
 	off_t off, len;
@@ -541,5 +534,5 @@ socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 	return off;
 # endif
 }
-#endif // !defined(__SCE__)
+#endif // !defined(_GAMING_XBOX) && !defined(__SCE__)
 
