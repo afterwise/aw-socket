@@ -25,7 +25,7 @@
 # if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN 1
 #  define _WIN32_WINNT 0x0600
-# elif defined(__linux__)
+# elif defined(__linux__) || defined(__NINTENDO__)
 #  define _BSD_SOURCE 1
 #  define _DEFAULT_SOURCE 1
 #  define _POSIX_C_SOURCE 200809L
@@ -46,7 +46,7 @@
 # include <unistd.h>
 #endif
 
-#if defined(__linux__) || defined(__APPLE__) || defined(__SCE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__SCE__) || defined(__NINTENDO__)
 # include <arpa/inet.h>
 # include <netinet/tcp.h>
 #endif
@@ -507,7 +507,7 @@ socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_end
 #endif
 }
 
-#if !defined(_GAMING_XBOX) && !defined(__SCE__)
+#if !defined(_GAMING_XBOX) && !defined(__SCE__) && !defined(__NINTENDO__)
 socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 # if defined(_WIN32)
 	if (!TransmitFile(sd, (HANDLE) fd, (DWORD) n, 0, NULL, NULL, 0))

@@ -150,7 +150,7 @@ _socket_api socket_ssize_t socket_recv(socket_t sd, void *p, size_t n, int flags
 _socket_api socket_ssize_t socket_sendto(socket_t sd, const void *p, size_t n, const struct socket_endpoint *endpoint);
 _socket_api socket_ssize_t socket_recvfrom(socket_t sd, void *p, size_t n, struct socket_endpoint *endpoint);
 
-#if !defined(_GAMING_XBOX) && !defined(__SCE__)
+#if !defined(_GAMING_XBOX) && !defined(__SCE__) && !defined(__NINTENDO__)
 _socket_api socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
 #endif
 
