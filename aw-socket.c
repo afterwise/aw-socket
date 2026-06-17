@@ -21,6 +21,8 @@
    THE SOFTWARE.
  */
 
+#if !defined(__NINTENDO__) || !__has_include(<socket_Config.h>)
+
 #ifndef _nofeatures
 # if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN 1
@@ -40,15 +42,11 @@
 #if defined(_WIN32)
 # include <mswsock.h>
 # include <ws2tcpip.h>
-#else
-# include <netinet/in.h>
-# include <fcntl.h>
-# include <unistd.h>
-#endif
-
-#if defined(__linux__) || defined(__APPLE__) || defined(__SCE__) || defined(__NINTENDO__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__SCE__) || defined(__NINTENDO__)
 # include <arpa/inet.h>
+# include <fcntl.h>
 # include <netinet/tcp.h>
+# include <unistd.h>
 #endif
 
 #if defined(__linux__)
@@ -535,4 +533,6 @@ socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n) {
 # endif
 }
 #endif // !defined(_GAMING_XBOX) && !defined(__SCE__)
+
+#endif // !defined(__NINTENDO__) || !__has_include(<socket_Config.h>)
 

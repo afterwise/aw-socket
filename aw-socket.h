@@ -24,11 +24,13 @@
 #ifndef AW_SOCKET_H
 #define AW_SOCKET_H
 
+#if !defined(__NINTENDO__) || !__has_include(<socket_Config.h>)
+
 #if defined(_WIN32)
 # include <winsock2.h>
 # include <ws2tcpip.h>
 # include <sys/types.h>
-#else
+#elif defined(__linux__) || defined(__APPLE__) || defined(__SCE__) || defined(__NINTENDO__)
 # include <netinet/in.h>
 # include <sys/socket.h>
 # if defined(__SCE__)
@@ -157,6 +159,8 @@ _socket_api socket_ssize_t socket_sendfile(socket_t sd, intptr_t fd, size_t n);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif // !defined(__NINTENDO__) || !__has_include(<socket_Config.h>)
 
 #endif /* AW_SOCKET_H */
 
